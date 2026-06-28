@@ -10,6 +10,8 @@
  * URL format: https://liff.line.me/{LIFF_ID}?page=form&id={FORM_ID}
  */
 
+import { resolveOfferPreset } from './offers.js';
+
 declare const liff: {
   init(config: { liffId: string }): Promise<void>;
   isLoggedIn(): boolean;
@@ -45,6 +47,8 @@ interface FormState {
   profile: { userId: string; displayName: string; pictureUrl?: string } | null;
   friendId: string | null;
   submitting: boolean;
+  checkoutUrl: string | null;
+  checkoutError: string | null;
 }
 
 const state: FormState = {
@@ -52,6 +56,8 @@ const state: FormState = {
   profile: null,
   friendId: null,
   submitting: false,
+  checkoutUrl: null,
+  checkoutError: null,
 };
 
 function escapeHtml(str: string): string {
@@ -72,6 +78,95 @@ function apiCall(path: string, options?: RequestInit): Promise<Response> {
 
 function getApp(): HTMLElement {
   return document.getElementById('app')!;
+}
+
+interface CheckoutConfig {
+  priceId: string;
+  productId: string;
+  offerId: string;
+  refCode: string;
+  successUrl: string;
+  cancelUrl: string;
+  stripeCustomerId?: string;
+  mode?: 'payment' | 'subscription';
+  campaignId?: string;
+  entryScenarioId?: string;
+  entryFormId?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+}
+
+function getCheckoutConfig(formId: string): CheckoutConfig | null {
+  const params = new URLSearchParams(window.location.search);
+  const priceId = params.get('priceId');
+  const productId = params.get('productId');
+  const offerId = params.get('offerId');
+  const explicitConfig = priceId && productId && offerId
+    ? {
+        priceId,
+        productId,
+        offerId,
+        mode: (params.get('mode') === 'subscription' ? 'subscription' : 'payment') as 'payment' | 'subscription',
+      }
+    : null;
+
+  const presetName = params.get('offerPreset');
+  const presetVariant = params.get('offerVariant');
+  const presetConfig = resolveOfferPreset(presetName, presetVariant);
+  const offerConfig = explicitConfig ?? presetConfig;
+
+  if (!offerConfig) {
+    return null;
+  }
+
+  const refCode = params.get('ref') || 'direct';
+  const successUrl = params.get('successUrl') || `${window.location.origin}/thank-you`;
+  const cancelUrl = params.get('cancelUrl') || window.location.href;
+
+  return {
+    priceId: offerConfig.priceId,
+    productId: offerConfig.productId,
+    offerId: offerConfig.offerId,
+    refCode,
+    successUrl,
+    cancelUrl,
+    stripeCustomerId: params.get('stripeCustomerId') || undefined,
+    mode: offerConfig.mode ?? 'payment',
+    campaignId: params.get('campaignId') || undefined,
+    entryScenarioId: params.get('entryScenarioId') || undefined,
+    entryFormId: params.get('entryFormId') || formId,
+    utmSource: params.get('utm_source') || undefined,
+    utmMedium: params.get('utm_medium') || undefined,
+    utmCampaign: params.get('utm_campaign') || undefined,
+    utmContent: params.get('utm_content') || undefined,
+  };
+}
+
+function extractEmailFromFormData(data: Record<string, unknown>): string | undefined {
+  for (const [key, value] of Object.entries(data)) {
+    if (typeof value !== 'string') continue;
+    if (key.toLowerCase().includes('mail') || key.toLowerCase().includes('email')) {
+      if (value.trim()) return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function resolveVariantFromFormData(data: Record<string, unknown>): string | null {
+  const params = new URLSearchParams(window.location.search);
+  const variantField = params.get('offerVariantField');
+  if (!variantField) return params.get('offerVariant');
+
+  const rawValue = data[variantField];
+  if (typeof rawValue === 'string' && rawValue.trim()) {
+    return rawValue.trim();
+  }
+  if (Array.isArray(rawValue) && rawValue.length > 0 && typeof rawValue[0] === 'string') {
+    return rawValue[0];
+  }
+  return params.get('offerVariant');
 }
 
 // ========== Field Rendering ==========
@@ -204,11 +299,22 @@ function injectStyles(): void {
     .submit-btn:active { opacity: 0.85; }
     .submit-btn:disabled { background: #bbb; cursor: not-allowed; }
     .form-error { color: #e53e3e; font-size: 12px; margin-top: 4px; }
-    .form-success { text-align: center; padding: 40px 20px; }
-    .form-success .check { width: 64px; height: 64px; border-radius: 50%; background: #06C755; color: #fff; font-size: 32px; line-height: 64px; margin: 0 auto 16px; }
-    .form-success h2 { font-size: 20px; color: #06C755; margin-bottom: 12px; }
-    .form-success p { font-size: 14px; color: #666; line-height: 1.6; }
-  `;
+     .form-success { text-align: center; padding: 40px 20px; }
+     .form-success .check { width: 64px; height: 64px; border-radius: 50%; background: #06C755; color: #fff; font-size: 32px; line-height: 64px; margin: 0 auto 16px; }
+     .form-success h2 { font-size: 20px; color: #06C755; margin-bottom: 12px; }
+     .form-success p { font-size: 14px; color: #666; line-height: 1.6; }
+     .success-card { background: #fff; border-radius: 16px; padding: 28px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); text-align: center; }
+     .success-icon { width: 64px; height: 64px; border-radius: 50%; background: #06C755; color: #fff; font-size: 32px; line-height: 64px; margin: 0 auto 16px; }
+     .success-message { font-size: 14px; color: #666; line-height: 1.6; margin-bottom: 16px; }
+     .checkout-message { font-size: 13px; color: #4b5563; line-height: 1.6; margin: 12px 0 16px; }
+     .checkout-btn, .close-btn {
+       display: block; width: 100%; padding: 14px; border: none; border-radius: 8px;
+       background: #06C755; color: #fff; font-size: 16px; font-weight: 700; text-decoration: none;
+       cursor: pointer; font-family: inherit; margin-top: 10px; transition: opacity 0.15s;
+     }
+     .checkout-btn.secondary, .close-btn.secondary { background: #e5e7eb; color: #111827; }
+     .checkout-btn:active, .close-btn:active { opacity: 0.85; }
+   `;
   document.head.appendChild(style);
 }
 
@@ -248,13 +354,26 @@ function render(): void {
 
 function renderSuccess(): void {
   const app = getApp();
+  const checkoutBlock = state.checkoutUrl
+    ? `
+      <p class="checkout-message">このままお申し込み手続きへ進めます。</p>
+      <a class="checkout-btn" id="checkoutBtn" href="${escapeHtml(state.checkoutUrl)}">決済へ進む</a>
+      <button class="close-btn secondary" id="closeBtn" type="button">あとで閉じる</button>
+    `
+    : `
+      <button class="close-btn" id="closeBtn" type="button">閉じる</button>
+    `;
+  const checkoutErrorHtml = state.checkoutError
+    ? `<p class="checkout-message" style="color:#b45309;">${escapeHtml(state.checkoutError)}</p>`
+    : '';
   app.innerHTML = `
     <div class="form-page">
       <div class="success-card">
         <div class="success-icon">✓</div>
         <h2>送信完了！</h2>
         <p class="success-message">ご回答ありがとうございました。</p>
-        <button class="close-btn" id="closeBtn">閉じる</button>
+        ${checkoutErrorHtml}
+        ${checkoutBlock}
       </div>
     </div>
   `;
@@ -269,10 +388,70 @@ function renderSuccess(): void {
 
   // Auto-close after 3s inside LINE
   if (liff.isInClient()) {
-    setTimeout(() => {
-      try { liff.closeWindow(); } catch { /* ignore */ }
-    }, 3000);
+    if (!state.checkoutUrl) {
+      setTimeout(() => {
+        try { liff.closeWindow(); } catch { /* ignore */ }
+      }, 3000);
+    }
   }
+}
+
+async function createCheckoutSession(data: Record<string, unknown>): Promise<string | null> {
+  if (!state.formDef || !state.profile) return null;
+
+  const params = new URLSearchParams(window.location.search);
+  const presetName = params.get('offerPreset');
+  const variantFromData = resolveVariantFromFormData(data);
+  const fallbackConfig = getCheckoutConfig(state.formDef.id);
+  const presetConfig = presetName ? resolveOfferPreset(presetName, variantFromData) : null;
+  const config = presetConfig && fallbackConfig
+    ? { ...fallbackConfig, ...presetConfig }
+    : presetConfig
+      ? {
+          ...fallbackConfig,
+          ...presetConfig,
+          refCode: fallbackConfig?.refCode ?? (params.get('ref') || 'direct'),
+          successUrl: fallbackConfig?.successUrl ?? (params.get('successUrl') || `${window.location.origin}/thank-you`),
+          cancelUrl: fallbackConfig?.cancelUrl ?? (params.get('cancelUrl') || window.location.href),
+          stripeCustomerId: fallbackConfig?.stripeCustomerId,
+          campaignId: fallbackConfig?.campaignId,
+          entryScenarioId: fallbackConfig?.entryScenarioId,
+          entryFormId: fallbackConfig?.entryFormId ?? state.formDef.id,
+          utmSource: fallbackConfig?.utmSource,
+          utmMedium: fallbackConfig?.utmMedium,
+          utmCampaign: fallbackConfig?.utmCampaign,
+          utmContent: fallbackConfig?.utmContent,
+        }
+      : fallbackConfig;
+
+  if (!config) return null;
+
+  const response = await apiCall('/api/integrations/stripe/checkout-sessions', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...config,
+      lineUserId: state.profile.userId,
+      stripeCustomerId: config.stripeCustomerId,
+      customerEmail: extractEmailFromFormData(data),
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(text || '決済URLの作成に失敗しました');
+  }
+
+  const json = await response.json() as {
+    success: boolean;
+    data?: { url?: string };
+    error?: string;
+  };
+
+  if (!json.success || !json.data?.url) {
+    throw new Error(json.error || '決済URLの作成に失敗しました');
+  }
+
+  return json.data.url;
 }
 
 function renderFormError(message: string): void {
@@ -384,6 +563,8 @@ async function submitForm(): Promise<void> {
 
   try {
     const data = collectFormData();
+    state.checkoutUrl = null;
+    state.checkoutError = null;
     console.log('Form data collected:', JSON.stringify(data));
     const body: Record<string, unknown> = { data };
     if (state.profile?.userId) body.lineUserId = state.profile.userId;
@@ -403,6 +584,14 @@ async function submitForm(): Promise<void> {
       throw new Error(`${res.status}: ${errMsg}`);
     }
 
+    try {
+      state.checkoutUrl = await createCheckoutSession(data);
+    } catch (checkoutError) {
+      state.checkoutUrl = null;
+      state.checkoutError = checkoutError instanceof Error
+        ? `決済URLの作成に失敗しました。あとでご案内します。 (${checkoutError.message})`
+        : '決済URLの作成に失敗しました。あとでご案内します。';
+    }
     renderSuccess();
   } catch (err) {
     state.submitting = false;

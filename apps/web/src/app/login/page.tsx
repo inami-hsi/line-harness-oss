@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { getApiBaseUrl } from '@/lib/env'
 
 export default function LoginPage() {
   const [apiKey, setApiKey] = useState('')
@@ -15,8 +16,7 @@ export default function LoginPage() {
 
     try {
       // Validate by calling a simple endpoint
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
-      const res = await fetch(`${apiUrl}/api/friends/count`, {
+      const res = await fetch(`${getApiBaseUrl()}/api/friends/count`, {
         headers: { Authorization: `Bearer ${apiKey}` },
       })
 

@@ -56,6 +56,46 @@ L社/U社代替。AI（CC）ネイティブ設計。
 - [x] エントリールート — 流入元トラッキング
 - [x] friends.scoreカラム追加 — マイグレーション漏れ修正
 
+### Round 3.6 (エバーグリーンローンチ導線) ✅ 進行中 2026-04-04
+- [x] SDK ビルド修正
+  - `packages/sdk/tsconfig.json` に `DOM` lib を追加
+  - 以前落ちていた `URLSearchParams` の型定義ビルドを解消
+- [x] 管理画面の環境依存 URL 共通化
+  - `apps/web/src/lib/env.ts` を追加
+  - ダッシュボード CTA、ログイン、流入経路分析の URL 生成を統一
+- [x] `plugin-template` の雛形強化
+  - Webhook 署名検証
+  - イベント処理の実装
+  - README / `.dev.vars.example` / 設定ガイド追加
+- [x] `plugin-template` の Stripe 特化
+  - `@line-harness/plugin-stripe` 相当の構成へ変更
+  - Stripe Webhook (`checkout.session.completed`, `invoice.payment_failed`, `customer.subscription.*`) を処理
+  - Stripe 顧客 / サブスク同期
+  - トライアル終了前 / 支払い失敗の LINE フォロー通知
+- [x] Stripe Checkout metadata 設計書追加
+  - `docs/STRIPE_CHECKOUT_METADATA.md`
+  - `lineHarnessFriendId`, `stripeCustomerId`, `productId`, `offerId`, `refCode` を最小セットとして定義
+  - `packages/plugin-template/src/stripe-checkout-metadata.ts` を追加
+- [x] Worker API に Checkout Session 作成 endpoint を追加
+  - `POST /api/integrations/stripe/checkout-sessions`
+  - `priceId`, `successUrl`, `cancelUrl`, `lineHarnessFriendId` / `lineUserId`, `productId`, `offerId`, `refCode` を受け付け
+  - Web 側 API クライアントにも `api.stripe.createCheckoutSession()` を追加
+- [x] LIFF フォーム送信後の決済導線を追加
+  - `apps/liff/src/form.ts`
+  - フォーム送信成功後に Checkout Session を作成し、「決済へ進む」ボタンを表示
+  - Checkout 生成のみ失敗した場合でもフォーム送信成功は維持
+- [x] LIFF オファー分岐レイヤーを追加
+  - `apps/liff/src/offers.ts`
+  - `offerPreset` / `offerVariant` / `offerVariantField` で価格分岐
+  - 診断結果やフォーム回答値に応じたオファー切り替えが可能
+- [x] LIFF オファー設定の環境変数化
+  - `apps/liff/.env.example`
+  - `apps/liff/.env.local.example`
+  - `apps/liff/.env.local`
+  - `VITE_OFFER_*` で本番 `priceId` / `productId` / `offerId` を差し替え可能
+- [x] ビルド確認
+  - ここまでの変更後も `npm run build` 成功
+
 ### Round 4 (予定)
 - [ ] メール配信連携 (SendGrid/SES)
 - [ ] SMS連携
@@ -122,3 +162,15 @@ templates, tracked_links, users
 ## 参考資料
 - SPEC.md - 技術仕様
 - LSTEP_FEATURES.md - L社/U社全機能調査
+- STRIPE_CHECKOUT_METADATA.md - Stripe Checkout metadata 設計
+
+## 次の再開ポイント
+- `apps/liff/.env.local` に本番 `VITE_LIFF_ID` / `VITE_BOT_BASIC_ID` / `VITE_OFFER_*` を投入
+- まずは `evergreen_launch.core` 1本で疎通確認
+- 確認順
+  1. LIFF フォーム表示
+  2. フォーム送信
+  3. Checkout Session 作成
+  4. Stripe Checkout 遷移
+  5. `checkout.session.completed` Webhook 着弾
+  6. LINE Harness 側の metadata / タグ / 購入後メッセージ確認

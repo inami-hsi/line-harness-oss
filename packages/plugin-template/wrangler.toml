@@ -1,4 +1,4 @@
-name = "line-harness-plugin-myservice"
+name = "line-harness-plugin-stripe"
 main = "src/index.ts"
 compatibility_date = "2024-06-01"
 
@@ -10,7 +10,9 @@ crons = ["0 * * * *"]
 # LINE Harness API connection
 LINE_HARNESS_API_URL = "https://your-line-harness.example.com"
 # Set secrets via: wrangler secret put LINE_HARNESS_API_KEY
-# Set secrets via: wrangler secret put EXTERNAL_API_KEY
+# Set secret via: wrangler secret put STRIPE_SECRET_KEY
+# Optional webhook signature secret
+# Set secret via: wrangler secret put STRIPE_WEBHOOK_SECRET
 
 # Optional: LINE account ID for multi-account setups
 # LINE_ACCOUNT_ID = ""

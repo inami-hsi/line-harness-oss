@@ -1,7 +1,7 @@
 {
-  "name": "@line-harness/plugin-myservice",
+  "name": "@line-harness/plugin-stripe",
   "version": "0.1.0",
-  "description": "LINE Harness plugin for MyService integration",
+  "description": "LINE Harness plugin template for Stripe-based evergreen launch automation",
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@line-harness/sdk": "^0.4.0"
+    "@line-harness/sdk": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240620.0",

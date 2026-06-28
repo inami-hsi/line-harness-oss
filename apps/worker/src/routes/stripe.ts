@@ -4,6 +4,7 @@ import {
   getStripeEventByStripeId,
   createStripeEvent,
   jstNow,
+  getFriendByLineUserId,
 } from '@line-crm/db';
 import type { Env } from '../index.js';
 
@@ -22,6 +23,95 @@ interface StripeWebhookBody {
       status?: string;
     };
   };
+}
+
+interface CreateCheckoutSessionBody {
+  priceId: string;
+  successUrl: string;
+  cancelUrl: string;
+  lineHarnessFriendId?: string;
+  lineUserId?: string;
+  productId: string;
+  offerId: string;
+  refCode: string;
+  mode?: 'payment' | 'subscription';
+  quantity?: number;
+  stripeCustomerId?: string;
+  customerEmail?: string;
+  campaignId?: string;
+  entryScenarioId?: string;
+  entryFormId?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmContent?: string;
+  allowPromotionCodes?: boolean;
+}
+
+function buildStripeMetadata(body: CreateCheckoutSessionBody): Record<string, string> {
+  const metadata = {
+    lineHarnessFriendId: body.lineHarnessFriendId,
+    lineUserId: body.lineUserId,
+    stripeCustomerId: body.stripeCustomerId,
+    productId: body.productId,
+    offerId: body.offerId,
+    refCode: body.refCode,
+    campaignId: body.campaignId,
+    entryScenarioId: body.entryScenarioId,
+    entryFormId: body.entryFormId,
+    utmSource: body.utmSource,
+    utmMedium: body.utmMedium,
+    utmCampaign: body.utmCampaign,
+    utmContent: body.utmContent,
+  };
+
+  return Object.fromEntries(
+    Object.entries(metadata).filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0),
+  );
+}
+
+async function createStripeCheckoutSession(
+  secretKey: string,
+  body: CreateCheckoutSessionBody,
+): Promise<Record<string, unknown>> {
+  const params = new URLSearchParams();
+  params.set('mode', body.mode ?? 'payment');
+  params.set('success_url', body.successUrl);
+  params.set('cancel_url', body.cancelUrl);
+  params.set('client_reference_id', body.lineHarnessFriendId);
+  params.set('line_items[0][price]', body.priceId);
+  params.set('line_items[0][quantity]', String(body.quantity ?? 1));
+
+  if (body.stripeCustomerId) {
+    params.set('customer', body.stripeCustomerId);
+  } else if (body.customerEmail) {
+    params.set('customer_email', body.customerEmail);
+  }
+
+  if (body.allowPromotionCodes) {
+    params.set('allow_promotion_codes', 'true');
+  }
+
+  const metadata = buildStripeMetadata(body);
+  for (const [key, value] of Object.entries(metadata)) {
+    params.set(`metadata[${key}]`, value);
+  }
+
+  const response = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${secretKey}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Stripe API error ${response.status}: ${text}`);
+  }
+
+  return response.json() as Promise<Record<string, unknown>>;
 }
 
 // ========== Stripeイベント一覧 ==========
@@ -47,6 +137,61 @@ stripe.get('/api/integrations/stripe/events', async (c) => {
     });
   } catch (err) {
     console.error('GET /api/integrations/stripe/events error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// ========== Checkout Session作成 ==========
+
+stripe.post('/api/integrations/stripe/checkout-sessions', async (c) => {
+  try {
+    const secretKey = c.env.STRIPE_SECRET_KEY;
+    if (!secretKey) {
+      return c.json({ success: false, error: 'STRIPE_SECRET_KEY is not configured' }, 500);
+    }
+
+    const body = await c.req.json<CreateCheckoutSessionBody>();
+    let lineHarnessFriendId = body.lineHarnessFriendId;
+
+    if (!lineHarnessFriendId && body.lineUserId) {
+      const friend = await getFriendByLineUserId(c.env.DB, body.lineUserId);
+      if (friend) {
+        lineHarnessFriendId = friend.id;
+      }
+    }
+
+    if (
+      !body.priceId ||
+      !body.successUrl ||
+      !body.cancelUrl ||
+      !lineHarnessFriendId ||
+      !body.productId ||
+      !body.offerId ||
+      !body.refCode
+    ) {
+      return c.json({ success: false, error: 'Missing required checkout session fields' }, 400);
+    }
+
+    if (!body.stripeCustomerId && !body.customerEmail) {
+      return c.json({ success: false, error: 'stripeCustomerId or customerEmail is required' }, 400);
+    }
+
+    const payload = { ...body, lineHarnessFriendId };
+    const session = await createStripeCheckoutSession(secretKey, payload);
+
+    return c.json({
+      success: true,
+      data: {
+        id: session.id,
+        url: session.url,
+        mode: session.mode,
+        customer: session.customer,
+        clientReferenceId: session.client_reference_id,
+        metadata: session.metadata ?? buildStripeMetadata(payload),
+      },
+    });
+  } catch (err) {
+    console.error('POST /api/integrations/stripe/checkout-sessions error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
   }
 });

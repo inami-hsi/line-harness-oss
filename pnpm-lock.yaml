@@ -105,8 +105,8 @@ importers:
   packages/mcp-server:
     dependencies:
       '@line-harness/sdk':
-        specifier: workspace:*
-        version: link:../sdk
+        specifier: ^0.1.0
+        version: 0.1.0
       '@modelcontextprotocol/sdk':
         specifier: ^1.12.1
         version: 1.28.0(zod@3.25.76)
@@ -120,6 +120,31 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+
+  packages/plugin-template:
+    dependencies:
+      '@line-harness/sdk':
+        specifier: workspace:*
+        version: link:../sdk
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^4.20240620.0
+        version: 4.20260317.1
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.12.1
+        version: 1.28.0(zod@3.25.76)
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.8)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      wrangler:
+        specifier: ^3.60.0
+        version: 3.114.17(@cloudflare/workers-types@4.20260317.1)
+      zod:
+        specifier: ^3.24.4
+        version: 3.25.76
 
   packages/sdk:
     devDependencies:
@@ -1286,6 +1311,9 @@ packages:
     resolution: {integrity: sha512-rVQTBIROL3DMWpjzC2/f5qYO2mAZsV+1Rk4NVJzUpB59atEddmXONLGPlSk3GFASLMcU8Sb3G8gu61dFrM9wNw==}
     peerDependencies:
       tslib: ^2.3.0
+
+  '@line-harness/sdk@0.1.0':
+    resolution: {integrity: sha512-C4KTPQ7mtRk0wqEaoW0obPYPNQdThL2/dGUtPiFipe/6peIIXoaP85ODy8gjvnuOTo7lRiz53G6bzFuf35My9g==}
 
   '@line/bot-sdk@10.6.0':
     resolution: {integrity: sha512-4hSpglL/G/cW2JCcohaYz/BS0uOSJNV9IEYdMm0EiPEvDLayoI2hGq2D86uYPQFD2gvgkyhmzdShpWLG3P5r3w==}
@@ -3700,6 +3728,8 @@ snapshots:
       '@liff/logger': 2.27.3(tslib@2.8.1)
       '@liff/util': 2.27.3(tslib@2.8.1)
       tslib: 2.8.1
+
+  '@line-harness/sdk@0.1.0': {}
 
   '@line/bot-sdk@10.6.0':
     dependencies:

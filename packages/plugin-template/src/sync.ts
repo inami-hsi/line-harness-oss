@@ -1,14 +1,9 @@
 /**
- * Sync: pull data from MyService and update LINE Harness friends.
- *
- * Common patterns:
- * - Sync customer status → metadata fields
- * - Sync subscription tiers → tags
- * - Sync appointment history → metadata
+ * Sync Stripe customer/subscription state into LINE Harness metadata and tags.
  */
 
-import { LineHarness } from '@line-harness/sdk'
-import { MyServiceClient } from './external-api.js'
+import { LineHarness, type Friend } from '@line-harness/sdk'
+import { StripeClient, type StripeCustomer, type StripeSubscription } from './external-api.js'
 import type { Env } from './index.js'
 
 function createClients(env: Env) {
@@ -17,91 +12,107 @@ function createClients(env: Env) {
     apiKey: env.LINE_HARNESS_API_KEY,
     lineAccountId: env.LINE_ACCOUNT_ID,
   })
-  const myService = new MyServiceClient(env.EXTERNAL_API_KEY)
-  return { harness, myService }
+  const stripe = new StripeClient(env.STRIPE_SECRET_KEY)
+  return { harness, stripe }
 }
 
-/**
- * Main sync function: called by the cron handler.
- *
- * This example:
- * 1. Fetches all customers from MyService
- * 2. For each customer that has a LINE friend record, updates metadata and tags
- */
+async function ensureTag(harness: LineHarness, name: string, color: string): Promise<string> {
+  const tags = await harness.tags.list()
+  const existing = tags.find((tag) => tag.name === name)
+  if (existing) return existing.id
+  const created = await harness.tags.create({ name, color })
+  return created.id
+}
+
+async function findFriendByStripeCustomerId(
+  harness: LineHarness,
+  stripeCustomerId: string,
+): Promise<Friend | null> {
+  let offset = 0
+  const limit = 100
+
+  while (true) {
+    const page = await harness.friends.list({ limit, offset })
+    const friend = page.items.find(
+      (item) => item.metadata?.stripeCustomerId === stripeCustomerId,
+    )
+    if (friend) return friend
+    if (!page.hasNextPage) return null
+    offset += limit
+  }
+}
+
+async function syncCustomerMetadata(
+  harness: LineHarness,
+  customer: StripeCustomer,
+): Promise<Friend | null> {
+  const friend = await findFriendByStripeCustomerId(harness, customer.id)
+  if (!friend) return null
+
+  await harness.friends.setMetadata(friend.id, {
+    stripeCustomerId: customer.id,
+    stripeEmail: customer.email,
+    stripeCustomerName: customer.name,
+  })
+
+  return friend
+}
+
+async function syncSubscriptionState(
+  harness: LineHarness,
+  subscription: StripeSubscription,
+): Promise<void> {
+  const friend = await findFriendByStripeCustomerId(harness, subscription.customer)
+  if (!friend) return
+
+  await harness.friends.setMetadata(friend.id, {
+    stripeSubscriptionId: subscription.id,
+    stripeSubscriptionStatus: subscription.status,
+    stripeCurrentPeriodEnd: subscription.currentPeriodEnd,
+    stripeTrialEnd: subscription.trialEnd,
+    stripeCancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
+    stripePriceIds: subscription.priceIds,
+    stripeProductIds: subscription.productIds,
+  })
+
+  const statusTagId = await ensureTag(
+    harness,
+    `stripe:subscription:${subscription.status}`,
+    '#7C3AED',
+  )
+  await harness.friends.addTag(friend.id, statusTagId)
+
+  for (const productId of subscription.productIds) {
+    const productTagId = await ensureTag(harness, `stripe:product:${productId}`, '#2563EB')
+    await harness.friends.addTag(friend.id, productTagId)
+  }
+}
+
 export async function syncExternalData(env: Env): Promise<void> {
-  const { harness, myService } = createClients(env)
+  const { harness, stripe } = createClients(env)
 
-  // Fetch customers from the external service
-  const customers = await myService.listCustomers()
+  const [customers, subscriptions] = await Promise.all([
+    stripe.listCustomers(100),
+    stripe.listSubscriptions('all', 100),
+  ])
 
-  // Ensure required tags exist in LINE Harness
-  const allTags = await harness.tags.list()
-  const tagMap = new Map(allTags.map((t) => [t.name, t.id]))
-
-  async function ensureTag(name: string, color?: string): Promise<string> {
-    const existing = tagMap.get(name)
-    if (existing) return existing
-    const created = await harness.tags.create({ name, color })
-    tagMap.set(name, created.id)
-    return created.id
-  }
-
-  // Create tags for each tier (customize for your service)
-  const tierTags: Record<string, string> = {}
-  for (const tier of ['free', 'basic', 'premium']) {
-    tierTags[tier] = await ensureTag(`myservice:${tier}`, '#3B82F6')
-  }
-
-  // Sync each customer
   for (const customer of customers) {
-    if (!customer.lineUserId) continue
-
     try {
-      // Find the LINE friend by paginating through all friends.
-      // In production, store a mapping (externalId → friendId) in your own DB
-      // to avoid full scans. This is a simplified example.
-      let friend = null
-      let offset = 0
-      const pageSize = 100
-      while (!friend) {
-        const page = await harness.friends.list({ limit: pageSize, offset })
-        friend = page.items.find(
-          (f) => f.metadata?.externalId === customer.id,
-        ) ?? null
-        if (!page.hasNextPage) break
-        offset += pageSize
-      }
-      if (!friend) continue
-
-      // Update metadata with external service data
-      await harness.friends.setMetadata(friend.id, {
-        externalId: customer.id,
-        myserviceTier: customer.tier,
-        myserviceLastVisit: customer.lastVisitDate,
-        myserviceVisitCount: customer.visitCount,
-      })
-
-      // Sync tier tag: remove old tier tags, add current one
-      const currentTierTagId = tierTags[customer.tier]
-      if (currentTierTagId) {
-        for (const [tier, tagId] of Object.entries(tierTags)) {
-          if (tier !== customer.tier) {
-            // Remove non-matching tier tags (ignore errors if not assigned)
-            try {
-              await harness.friends.removeTag(friend.id, tagId)
-            } catch {
-              // Tag was not assigned, ignore
-            }
-          }
-        }
-        await harness.friends.addTag(friend.id, currentTierTagId)
-      }
-
-      console.log(`[Sync] Updated friend ${friend.id} (${customer.id})`)
+      await syncCustomerMetadata(harness, customer)
     } catch (error) {
-      console.error(`[Sync] Failed for customer ${customer.id}:`, error)
+      console.error(`[Stripe Sync] Failed to sync customer ${customer.id}:`, error)
     }
   }
 
-  console.log(`[Sync] Completed. Processed ${customers.length} customers.`)
+  for (const subscription of subscriptions) {
+    try {
+      await syncSubscriptionState(harness, subscription)
+    } catch (error) {
+      console.error(`[Stripe Sync] Failed to sync subscription ${subscription.id}:`, error)
+    }
+  }
+
+  console.log(
+    `[Stripe Sync] Completed. Customers=${customers.length}, Subscriptions=${subscriptions.length}`,
+  )
 }

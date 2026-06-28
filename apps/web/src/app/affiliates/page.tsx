@@ -4,9 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import Header from '@/components/layout/header'
 
 import { fetchApi } from '@/lib/api'
+import { buildLineAuthUrl } from '@/lib/env'
 import { useAccount } from '@/contexts/account-context'
-
-const WORKER_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
 
 interface RefRoute {
   refCode: string
@@ -83,7 +82,7 @@ export default function AttributionPage() {
   }
 
   const handleCopy = async (refCode: string) => {
-    const url = `${WORKER_BASE}/auth/line?ref=${encodeURIComponent(refCode)}`
+    const url = buildLineAuthUrl(refCode)
     await navigator.clipboard.writeText(url)
     setCopiedCode(refCode)
     setTimeout(() => setCopiedCode(null), 2000)
@@ -147,7 +146,7 @@ export default function AttributionPage() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {summary.routes.map((route) => {
-                const authUrl = `${WORKER_BASE}/auth/line?ref=${encodeURIComponent(route.refCode)}`
+                const authUrl = buildLineAuthUrl(route.refCode)
                 const isExpanded = selectedRef === route.refCode
                 return (
                   <>

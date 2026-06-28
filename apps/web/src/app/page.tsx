@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { buildLineAuthUrl } from '@/lib/env'
 import CcPromptButton from '@/components/cc-prompt-button'
 import { useAccount } from '@/contexts/account-context'
 
@@ -83,6 +84,7 @@ export default function DashboardPage() {
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const demoAuthUrl = buildLineAuthUrl('dashboard')
 
   useEffect(() => {
     const load = async () => {
@@ -153,7 +155,7 @@ export default function DashboardPage() {
 
       {/* Demo banner */}
       <a
-        href="https://line-crm-worker.line-crm-api.workers.dev/auth/line?ref=dashboard"
+        href={demoAuthUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="block mb-6 p-4 rounded-xl border border-green-200 bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 transition-colors"

@@ -44,6 +44,8 @@ export type Env = {
     LINE_LOGIN_CHANNEL_ID: string;
     LINE_LOGIN_CHANNEL_SECRET: string;
     WORKER_URL: string;
+    STRIPE_SECRET_KEY?: string;
+    STRIPE_WEBHOOK_SECRET?: string;
   };
 };
 

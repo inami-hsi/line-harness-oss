@@ -25,11 +25,35 @@ import type {
 } from '@line-crm/shared'
 
 import type { Broadcast } from '@line-crm/shared'
+import { getApiBaseUrl } from './env'
 
 /** Broadcast type from API (now camelCase after worker serialization) */
 export type ApiBroadcast = Broadcast
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8787'
+const API_URL = getApiBaseUrl()
+
+export type CreateStripeCheckoutSessionInput = {
+  priceId: string
+  successUrl: string
+  cancelUrl: string
+  lineHarnessFriendId?: string
+  lineUserId?: string
+  productId: string
+  offerId: string
+  refCode: string
+  mode?: 'payment' | 'subscription'
+  quantity?: number
+  stripeCustomerId?: string
+  customerEmail?: string
+  campaignId?: string
+  entryScenarioId?: string
+  entryFormId?: string
+  utmSource?: string
+  utmMedium?: string
+  utmCampaign?: string
+  utmContent?: string
+  allowPromotionCodes?: boolean
+}
 
 /**
  * Read the API key from localStorage first (set during login), falling back to
@@ -479,5 +503,21 @@ export const api = {
       }),
     getMigration: (migrationId: string) =>
       fetchApi<ApiResponse<AccountMigration>>(`/api/accounts/migrations/${migrationId}`),
+  },
+  stripe: {
+    createCheckoutSession: (data: CreateStripeCheckoutSessionInput) =>
+      fetchApi<
+        ApiResponse<{
+          id: string
+          url: string
+          mode: string
+          customer: string | null
+          clientReferenceId: string | null
+          metadata: Record<string, string>
+        }>
+      >('/api/integrations/stripe/checkout-sessions', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   },
 }

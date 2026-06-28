@@ -1,0 +1,3 @@
+LINE_HARNESS_API_KEY=your-line-harness-api-key
+STRIPE_SECRET_KEY=sk_test_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
