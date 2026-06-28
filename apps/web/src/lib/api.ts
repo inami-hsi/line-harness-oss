@@ -520,4 +520,46 @@ export const api = {
         body: JSON.stringify(data),
       }),
   },
+  lottery: {
+    run: (data: {
+      entryTagId: string
+      prizeCount: number
+      winnerTagName?: string
+      winnerMessage?: string
+      loserMessage?: string
+    }) =>
+      fetchApi<ApiResponse<{
+        entrantCount: number
+        winnerCount: number
+        winners: Array<{ id: string; displayName: string }>
+      }>>('/api/integrations/lottery/run', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+  points: {
+    leaderboard: (limit?: number) =>
+      fetchApi<ApiResponse<Array<{
+        id: string
+        displayName: string
+        pictureUrl: string | null
+        points: number
+        pointsLastUpdated: string | null
+      }>>>(`/api/integrations/points/leaderboard${limit ? `?limit=${limit}` : ''}`),
+    adjust: (data: {
+      friendId: string
+      change: number
+      reason?: string
+      notify?: boolean
+    }) =>
+      fetchApi<ApiResponse<{
+        friendId: string
+        previousBalance: number
+        change: number
+        newBalance: number
+      }>>('/api/integrations/points/adjust', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
 }

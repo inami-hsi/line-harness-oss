@@ -78,7 +78,7 @@ async function createStripeCheckoutSession(
   params.set('mode', body.mode ?? 'payment');
   params.set('success_url', body.successUrl);
   params.set('cancel_url', body.cancelUrl);
-  params.set('client_reference_id', body.lineHarnessFriendId);
+  if (body.lineHarnessFriendId) params.set('client_reference_id', body.lineHarnessFriendId);
   params.set('line_items[0][price]', body.priceId);
   params.set('line_items[0][quantity]', String(body.quantity ?? 1));
 
