@@ -103,7 +103,7 @@ L社/U社代替。AI（CC）ネイティブ設計。
 - [x] LTV予測・チャーン予測 — `auditChurnRisk`: 全友だちスキャン→自動タグ付け→再エンゲージ通知
 - [x] ポイントシステム — `addPoints` / `subtractPoints`: metadata永続化 + 閾値タグ + LINE通知
 - [x] 抽選/くじ機能 — `runLottery`: タグ指定→当選抽選→タグ付け→LINE通知
-- [ ] ファネルビルダー（LIFF + CF Pages）
+- [x] ファネルビルダー（LIFF）— `?page=funnel&preset=evergreen_launch` マルチステップエンジン（intro/quiz/form/offer/done）
 
 各ファイルはすべて `packages/plugin-template/src/` 内に配置。
 LINE Harness SDK（`harness.friends.*`, `harness.tags.*`）と統合済み。

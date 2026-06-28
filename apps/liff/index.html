@@ -410,6 +410,168 @@
     .close-btn:active {
       background: #e8faf0;
     }
+
+    /* ========== Funnel Page ========== */
+    .funnel-wrap {
+      animation: fadeIn 0.3s ease;
+    }
+    .funnel-progress {
+      height: 4px;
+      background: #e8e8e8;
+      border-radius: 2px;
+      margin-bottom: 4px;
+      overflow: hidden;
+    }
+    .funnel-progress-bar {
+      height: 100%;
+      background: #06C755;
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+    .funnel-step-label {
+      font-size: 11px;
+      color: #bbb;
+      text-align: right;
+      margin-bottom: 12px;
+    }
+    .funnel-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 28px 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .funnel-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #222;
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+    .funnel-body {
+      font-size: 14px;
+      color: #666;
+      line-height: 1.7;
+      margin-bottom: 20px;
+      white-space: pre-line;
+    }
+    .funnel-question {
+      font-size: 16px;
+      font-weight: 700;
+      color: #222;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    .funnel-options {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .funnel-option {
+      padding: 14px 16px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 10px;
+      background: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .funnel-option:active,
+    .funnel-option:hover {
+      border-color: #06C755;
+      background: #e8faf0;
+      color: #06C755;
+    }
+    .funnel-btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      background: #06C755;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      font-family: inherit;
+      text-align: center;
+      text-decoration: none;
+      margin-top: 16px;
+    }
+    .funnel-btn:active { opacity: 0.85; }
+    .funnel-btn:disabled { background: #bbb; cursor: not-allowed; }
+    .funnel-btn-cta { background: #06C755; }
+    .funnel-btn-skip {
+      background: transparent;
+      border: 1.5px solid #ccc;
+      color: #999;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    .funnel-field {
+      margin-bottom: 16px;
+    }
+    .funnel-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 6px;
+    }
+    .funnel-label .req { color: #e53e3e; }
+    .funnel-input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+      box-sizing: border-box;
+    }
+    .funnel-input:focus { border-color: #06C755; }
+    .radio-group { display: flex; flex-direction: column; gap: 8px; }
+    .radio-label { font-size: 14px; color: #333; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+    .funnel-error {
+      font-size: 13px;
+      color: #e53e3e;
+      margin-top: 8px;
+      text-align: center;
+    }
+    /* Offer */
+    .offer-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      background: #fef3c7;
+      color: #92400e;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+    .offer-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #222;
+      margin-bottom: 8px;
+    }
+    .offer-desc {
+      font-size: 14px;
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 12px;
+    }
+    .offer-price {
+      font-size: 28px;
+      font-weight: 700;
+      color: #06C755;
+      margin-bottom: 4px;
+    }
   </style>
 </head>
 <body>
