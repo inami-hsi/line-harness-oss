@@ -13,6 +13,9 @@ import { registerGetFormSubmissions } from "./get-form-submissions.js";
 import { registerGetLinkClicks } from "./get-link-clicks.js";
 import { registerAccountSummary } from "./account-summary.js";
 import { registerListCrmObjects } from "./list-crm-objects.js";
+import { registerRunLottery } from "./run-lottery.js";
+import { registerManagePoints } from "./manage-points.js";
+import { registerAuditChurn } from "./audit-churn.js";
 
 export function registerAllTools(server: McpServer): void {
   registerSendMessage(server);
@@ -29,4 +32,7 @@ export function registerAllTools(server: McpServer): void {
   registerGetLinkClicks(server);
   registerAccountSummary(server);
   registerListCrmObjects(server);
+  registerRunLottery(server);
+  registerManagePoints(server);
+  registerAuditChurn(server);
 }
