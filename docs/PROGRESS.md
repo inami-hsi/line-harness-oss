@@ -96,14 +96,23 @@ L社/U社代替。AI（CC）ネイティブ設計。
 - [x] ビルド確認
   - ここまでの変更後も `npm run build` 成功
 
-### Round 4 (予定)
-- [ ] メール配信連携 (SendGrid/SES)
-- [ ] SMS連携
-- [ ] Instagram DM連携
-- [ ] LTV予測・チャーン予測
-- [ ] ポイントシステム
-- [ ] 抽選/くじ機能
+### Round 4 (プラグイン拡張) ✅ 完了 2026-06-28
+- [x] メール配信連携 (SendGrid) — `sendEmailToFriend` / `sendEmailBroadcast` + タグ付け
+- [x] SMS連携 (Twilio) — `sendSmsToFriend` / `sendSmsBroadcast` + タグ付け
+- [x] Instagram DM連携 (Meta Graph API) — `sendInstagramDMToFriend` / `sendInstagramDMBroadcast`
+- [x] LTV予測・チャーン予測 — `auditChurnRisk`: 全友だちスキャン→自動タグ付け→再エンゲージ通知
+- [x] ポイントシステム — `addPoints` / `subtractPoints`: metadata永続化 + 閾値タグ + LINE通知
+- [x] 抽選/くじ機能 — `runLottery`: タグ指定→当選抽選→タグ付け→LINE通知
 - [ ] ファネルビルダー（LIFF + CF Pages）
+
+各ファイルはすべて `packages/plugin-template/src/` 内に配置。
+LINE Harness SDK（`harness.friends.*`, `harness.tags.*`）と統合済み。
+メタデータ前提:
+- SendGrid: `friend.metadata.email`
+- Twilio SMS: `friend.metadata.phone` (E.164)
+- Instagram DM: `friend.metadata.instagramUserId`
+- LTV/Churn: `friend.metadata.totalRevenue`, `lastPurchaseDate`, `lastActiveDate` 等
+- Points: `friend.metadata.points`, `pointHistory[]`
 
 ## テスト済み機能 (2026-03-22 周アカウントで実施)
 
