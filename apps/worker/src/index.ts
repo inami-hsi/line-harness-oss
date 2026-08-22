@@ -60,6 +60,7 @@ import { conversations } from './routes/conversations.js';
 // インボックス機能 (/api/inbox/unanswered) に置き換えたため削除。
 // DB テーブル notification_rules / notifications は archive 目的で残してある。
 import { stripe } from './routes/stripe.js';
+import { integrations } from './routes/integrations.js';
 import { health } from './routes/health.js';
 import { automations } from './routes/automations.js';
 import { richMenus } from './routes/rich-menus.js';
@@ -219,6 +220,7 @@ app.route('/', templates);
 app.route('/', chats);
 app.route('/', conversations);
 app.route('/', stripe);
+app.route('/', integrations);
 app.route('/', health);
 app.route('/', automations);
 app.route('/', richMenus);

@@ -1,6 +1,35 @@
 import type { HttpClient } from '../http.js'
 import type { ApiResponse, PaginatedData, Friend, FriendListParams, MessageType } from '../types.js'
 
+export interface MileageSummary {
+  programId: string
+  programName: string
+  available: number
+  pending: number
+  lifetimeEarned: number
+  spent: number
+}
+
+export interface MileageHistoryItem {
+  id: string
+  amount: number
+  reason: string
+  entryType: string
+  status: string
+  occurredAt: string
+  [key: string]: unknown
+}
+
+export interface FriendMileage {
+  summary: MileageSummary
+  history: MileageHistoryItem[]
+}
+
+export interface MileageAdjustResult {
+  entry: MileageHistoryItem
+  summary: MileageSummary
+}
+
 export class FriendsResource {
   constructor(
     private readonly http: HttpClient,
@@ -71,5 +100,21 @@ export class FriendsResource {
 
   async removeRichMenu(friendId: string): Promise<void> {
     await this.http.delete(`/api/friends/${friendId}/rich-menu`)
+  }
+
+  async getMileage(friendId: string, limit?: number): Promise<FriendMileage> {
+    const path = limit
+      ? `/api/friends/${friendId}/mileage?limit=${limit}`
+      : `/api/friends/${friendId}/mileage`
+    const res = await this.http.get<ApiResponse<FriendMileage>>(path)
+    return res.data
+  }
+
+  async adjustMileage(friendId: string, amount: number, reason: string): Promise<MileageAdjustResult> {
+    const res = await this.http.post<ApiResponse<MileageAdjustResult>>(`/api/friends/${friendId}/mileage/adjust`, {
+      amount,
+      reason,
+    })
+    return res.data
   }
 }

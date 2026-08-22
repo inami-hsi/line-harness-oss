@@ -11,6 +11,7 @@ import {
   enrollFriendInScenario,
   getMileageSummaryForFriend,
   getMileageHistoryForFriend,
+  postMileageEntry,
   jstNow,
 } from '@line-crm/db';
 import type { Friend as DbFriend, Tag as DbTag } from '@line-crm/db';
@@ -413,6 +414,42 @@ friends.get('/api/friends/:id/mileage', async (c) => {
     return c.json({ success: true, data: { summary, history } });
   } catch (err) {
     console.error('GET /api/friends/:id/mileage error:', err);
+    return c.json({ success: false, error: 'Internal server error' }, 500);
+  }
+});
+
+// POST /api/friends/:id/mileage/adjust - manual ledger entry (staff/API adjustment, bypasses rule engine)
+friends.post('/api/friends/:id/mileage/adjust', async (c) => {
+  try {
+    const friendId = c.req.param('id');
+    const friend = await getFriendById(c.env.DB, friendId);
+    if (!friend) {
+      return c.json({ success: false, error: 'Friend not found' }, 404);
+    }
+
+    const body = await c.req.json<{ amount?: unknown; reason?: unknown }>();
+    const amount = typeof body.amount === 'number' ? Math.trunc(body.amount) : NaN;
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+    if (!Number.isInteger(amount) || amount === 0) {
+      return c.json({ success: false, error: 'amount must be a non-zero integer' }, 400);
+    }
+    if (!reason) {
+      return c.json({ success: false, error: 'reason is required' }, 400);
+    }
+
+    const entry = await postMileageEntry(c.env.DB, {
+      beneficiaryFriendId: friendId,
+      entryType: 'adjustment',
+      amount,
+      reason,
+      source: 'admin_manual',
+      idempotencyKey: crypto.randomUUID(),
+    });
+
+    const summary = await getMileageSummaryForFriend(c.env.DB, friendId);
+    return c.json({ success: true, data: { entry, summary } });
+  } catch (err) {
+    console.error('POST /api/friends/:id/mileage/adjust error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
   }
 });

@@ -1060,6 +1060,23 @@ export const api = {
     deleteRule: (id: string) =>
       fetchApi<ApiResponse<null>>(`/api/mileage/rules/${id}`, { method: 'DELETE' }),
   },
+  lottery: {
+    run: (data: {
+      entryTagId: string
+      prizeCount: number
+      winnerTagName?: string
+      winnerMessage?: string
+      loserMessage?: string
+    }) =>
+      fetchApi<ApiResponse<{
+        entrantCount: number
+        winnerCount: number
+        winners: Array<{ id: string; displayName: string }>
+      }>>('/api/integrations/lottery/run', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
   webhooks: {
     incoming: {
       list: () =>
