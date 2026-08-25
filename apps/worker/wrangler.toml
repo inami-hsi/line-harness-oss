@@ -56,7 +56,8 @@ CF_ACCOUNT_ID = "YOUR_DEV_ACCOUNT_ID"
 # D1:     npx wrangler d1 execute your-database --env production --remote --file ...
 # ═══════════════════════════════════════════════════════════════
 [env.production]
-account_id = "YOUR_ACCOUNT_ID"
+name = "line-crm-worker"
+account_id = "160870f78ed4af6790dcb53cff53f025"
 compatibility_flags = ["nodejs_compat"]
 
 [env.production.assets]
@@ -67,7 +68,7 @@ run_worker_first = true
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "line-crm"
-database_id = "YOUR_D1_DATABASE_ID"
+database_id = "34c15081-7487-4c57-95e4-477def6b8b44"
 
 [[env.production.r2_buckets]]
 binding = "IMAGES"
