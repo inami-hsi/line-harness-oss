@@ -25,12 +25,14 @@ import { registerManageForms } from "./manage-forms.js";
 import { registerManageTrackedLinks } from "./manage-tracked-links.js";
 import { registerManageAutoReplies } from "./manage-auto-replies.js";
 import { registerManageTrafficPools } from "./manage-traffic-pools.js";
+import { registerManageEntryRoutes } from "./manage-entry-routes.js";
 import { registerManageMessageTemplates } from "./manage-message-templates.js";
 import { registerListConversations } from "./list-conversations.js";
 import { registerGetConversation } from "./get-conversation.js";
 import { registerRunLottery } from "./run-lottery.js";
 import { registerManagePoints } from "./manage-points.js";
 import { registerAuditChurn } from "./audit-churn.js";
+import { registerManageWebinarVideo } from "./manage-webinar-video.js";
 
 export function registerAllTools(server: McpServer): void {
   registerSendMessage(server);
@@ -59,10 +61,12 @@ export function registerAllTools(server: McpServer): void {
   registerManageTrackedLinks(server);
   registerManageAutoReplies(server);
   registerManageTrafficPools(server);
+  registerManageEntryRoutes(server);
   registerManageMessageTemplates(server);
   registerListConversations(server);
   registerGetConversation(server);
   registerRunLottery(server);
   registerManagePoints(server);
   registerAuditChurn(server);
+  registerManageWebinarVideo(server);
 }

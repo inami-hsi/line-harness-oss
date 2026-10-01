@@ -1,6 +1,6 @@
 {
   "name": "line-oss-crm",
-  "version": "0.22.0",
+  "version": "0.24.1",
   "private": true,
   "description": "Open-source LINE Official Account CRM/marketing automation",
   "homepage": "https://the-harness.com/line-harness/",
@@ -16,6 +16,7 @@
     "url": "https://the-harness.com/noda-shuichi/"
   },
   "scripts": {
+    "plugin:create": "node examples/plugins/create-plugin.mjs",
     "dev:worker": "pnpm --filter worker dev",
     "dev:web": "pnpm --filter web dev",
     "build": "pnpm -r build",
@@ -27,11 +28,23 @@
     "deploy:update": "node packages/create-line-harness/dist/index.js update",
     "sandbox:create-line-harness": "bash scripts/run-create-line-harness-sandbox.sh",
     "test:scripts": "vitest run --config vitest.config.ts",
-    "build:bundle": "tsx scripts/release/build-bundle.ts"
+    "build:bundle": "tsx scripts/release/build-bundle.ts",
+    "build:wfp-bundle": "tsx scripts/release/build-wfp-bundle.ts"
   },
   "packageManager": "pnpm@9.15.4",
   "engines": {
     "node": ">=20"
+  },
+  "pnpm": {
+    "overrides": {
+      "axios": "1.20.0",
+      "fast-uri": "3.1.7",
+      "hono": "4.12.25",
+      "ip-address": "10.3.1",
+      "postcss": "8.5.28",
+      "react-router": "7.18.2",
+      "sharp": "0.35.4"
+    }
   },
   "devDependencies": {
     "typescript": "^5.9.3",

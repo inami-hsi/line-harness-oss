@@ -64,6 +64,7 @@ export async function runApply(
     databaseId: ctx.d1DatabaseId,
     names: ctx.target.migrations,
     migrations: bundle.migrations,
+    legacyMileageProjectionVersion: ctx.target.legacy_mileage_projection_version,
     onMigrationStart: (name) =>
       ev.emit({ step: 'migration', status: 'running', name }),
     onMigrationDone: (result) =>
@@ -72,7 +73,9 @@ export async function runApply(
         status: 'done',
         name: result.alreadyApplied
           ? `${result.name} (already applied)`
-          : result.name,
+          : result.adopted
+            ? `${result.name} (adopted, not executed)`
+            : result.name,
       }),
   });
 

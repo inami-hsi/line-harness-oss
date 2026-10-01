@@ -130,13 +130,27 @@ CREATE TABLE IF NOT EXISTS broadcasts (
   aggregation_unit  TEXT,
   batch_offset    INTEGER NOT NULL DEFAULT 0,
   segment_conditions TEXT,
-  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  -- NOTE: この DEFAULT だけ他テーブルの JST ISO-8601 形式ではなく UTC の datetime('now')。
+  -- 029_account_management_v2.sql がテーブルを再構築した際に datetime('now') で
+  -- 宣言しており、029 は schema.sql より後に適用されるため、replay 後の実効値は
+  -- UTC 側になる。
+  -- ここは「意図」ではなく「実際に出来上がる DDL」を書いている（schema.sql と
+  -- bootstrap.sql / migrated schema の乖離を防ぐため）。
+  -- 現時点で実害はない: broadcasts への INSERT は src/broadcasts.ts の 1 箇所のみで、
+  -- created_at を明示列挙して jstNow() をバインドしているため DEFAULT は発火しない。
+  -- created_at を省略する INSERT を新設する場合は、必ず jstNow() を明示バインドすること。
+  -- 揃えるには SQLite の仕様上テーブル再構築が必要で、未使用の DEFAULT のために
+  -- 既存テーブルを作り直すのは割に合わないと判断した。
+  -- 同様に UTC DEFAULT のままの列は test/timestamp-defaults.test.ts の
+  -- KNOWN_UTC_DEFAULTS に列挙してある（新規追加はテストが失敗する）。
+  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   account_ids        TEXT CHECK (account_ids IS NULL OR json_valid(account_ids)),
   dedup_priority     TEXT CHECK (dedup_priority IS NULL OR json_valid(dedup_priority)),
   failed_account_ids TEXT CHECK (failed_account_ids IS NULL OR json_valid(failed_account_ids)),
   dedup_progress     TEXT CHECK (dedup_progress IS NULL OR json_valid(dedup_progress)),
   batch_lock_at      TEXT,
-  track_links        INTEGER NOT NULL DEFAULT 1
+  track_links        INTEGER NOT NULL DEFAULT 1,
+  last_error         TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_broadcasts_status ON broadcasts (status);
@@ -762,7 +776,8 @@ CREATE TABLE IF NOT EXISTS notification_rules (
   channels     TEXT NOT NULL DEFAULT '["webhook"]',
   is_active    INTEGER NOT NULL DEFAULT 1,
   created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
-  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  line_account_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS notifications (
@@ -774,11 +789,13 @@ CREATE TABLE IF NOT EXISTS notifications (
   channel         TEXT NOT NULL,
   status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed')),
   metadata        TEXT,
-  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
+  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours')),
+  line_account_id TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_notifications_status ON notifications (status);
 CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications (created_at);
+CREATE INDEX IF NOT EXISTS idx_notifications_event_account ON notifications (event_type, line_account_id, created_at);
 
 -- ============================================================
 -- Round 3: Stripe決済連携
@@ -810,7 +827,8 @@ CREATE TABLE IF NOT EXISTS account_health_logs (
   created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f', 'now', '+9 hours'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_health_logs_account ON account_health_logs (line_account_id);
+CREATE INDEX IF NOT EXISTS idx_health_logs_account_created_at
+  ON account_health_logs (line_account_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS account_migrations (
   id               TEXT PRIMARY KEY,

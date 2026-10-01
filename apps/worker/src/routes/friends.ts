@@ -6,6 +6,7 @@ import {
   addTagToFriend,
   removeTagFromFriend,
   getFriendTags,
+  getFriendTagsByIds,
   getFormSubmissionsByFriend,
   getScenarios,
   enrollFriendInScenario,
@@ -91,8 +92,7 @@ friends.get('/api/friends', async (c) => {
     const tagId = c.req.query('tagId');
     const lineAccountId = c.req.query('lineAccountId');
     const search = c.req.query('search');
-    // ?includeTags=false skips per-row tag enrichment (N+1 of getFriendTags
-    // → ~50 extra D1 reads on a wide list query). The list view needs tags
+    // ?includeTags=false skips tag enrichment. The list view needs tags
     // for filter chips, but autocomplete-style consumers (test-recipient
     // picker, broadcast recipient picker) only render id/displayName/picture
     // and pay the cost for nothing. Default true to keep the historical
@@ -238,17 +238,13 @@ friends.get('/api/friends', async (c) => {
     const listResult = await listStmt.bind(...listBinds).all<DbFriend>();
     const items = listResult.results;
 
-    // Fetch tags for each friend in parallel so the list response includes tags.
-    // Skipped when ?includeTags=false (autocomplete consumers don't render
-    // tags and would otherwise pay N D1 reads per keystroke).
-    let itemsWithTags = includeTags
-      ? await Promise.all(
-          items.map(async (friend) => {
-            const tags = await getFriendTags(db, friend.id);
-            return { ...serializeFriendListRow(friend, includeChatStatus), tags: tags.map(serializeTag) };
-          }),
-        )
-      : items.map((friend) => ({ ...serializeFriendListRow(friend, includeChatStatus), tags: [] }));
+    // Enrich only IDs selected by the existing filters and pagination. Chunked
+    // bulk lookup preserves friend order and tag-name order without N+1 queries.
+    const tagsByFriend = includeTags ? await getFriendTagsByIds(db, items.map((friend) => friend.id)) : new Map<string, DbTag[]>();
+    let itemsWithTags = items.map((friend) => ({
+      ...serializeFriendListRow(friend, includeChatStatus),
+      tags: (tagsByFriend.get(friend.id) ?? []).map(serializeTag),
+    }));
 
     // Optional: hydrate chat status (latest in/out message, active scenario,
     // derived "handled" flag). Three batched queries instead of N×3 to keep
@@ -546,7 +542,7 @@ friends.delete('/api/friends/:id/tags/:tagId', async (c) => {
   }
 });
 
-// PUT /api/friends/:id/metadata - merge metadata fields
+// PUT /api/friends/:id/metadata - merge metadata fields (null deletes a key)
 friends.put('/api/friends/:id/metadata', async (c) => {
   try {
     const friendId = c.req.param('id');
@@ -560,6 +556,12 @@ friends.put('/api/friends/:id/metadata', async (c) => {
     const body = await c.req.json<Record<string, unknown>>();
     const existing = JSON.parse(friend.metadata || '{}');
     const merged = { ...existing, ...body };
+    // Explicit null deletes the key. A merge-only endpoint has no way to remove
+    // a field once written, so a typo'd or one-off key would be stuck on the
+    // friend forever (storing null instead just leaves visible dead entries).
+    for (const [key, value] of Object.entries(body)) {
+      if (value === null) delete merged[key];
+    }
     const now = jstNow();
 
     await db
@@ -631,14 +633,19 @@ friends.post('/api/friends/:id/messages', async (c) => {
 
     const { LineClient } = await import('@line-crm/line-sdk');
     // Resolve access token from friend's account (multi-account support)
-    let accessToken = c.env.LINE_CHANNEL_ACCESS_TOKEN;
-    const friendAccountId =
+    // 送信アカウントを1回だけ決めて、トークンと**リンクの持ち主**の両方に同じ行を使う。
+    // トークンだけ差し替えて ID を取りこぼすと、送信は正しいアカウントから出るのに
+    // 本文中の URL は「持ち主なし」のトラッキングリンクとして登録され、
+    // アカウント単位の OGP・LIFF フォールバックと分析が送信元と食い違う
+    // （Codex review round 3 の指摘）。
+    const { getLineAccountById, resolveDefaultLineAccount } = await import('@line-crm/db');
+    const rawFriendAccountId =
       ((friend as unknown as Record<string, unknown>).line_account_id as string | null) ?? null;
-    if (friendAccountId) {
-      const { getLineAccountById } = await import('@line-crm/db');
-      const account = await getLineAccountById(db, friendAccountId);
-      if (account) accessToken = account.channel_access_token;
-    }
+    const sendAccount = rawFriendAccountId
+      ? await getLineAccountById(db, rawFriendAccountId)
+      : await resolveDefaultLineAccount(db);
+    const friendAccountId = sendAccount?.id ?? rawFriendAccountId;
+    const accessToken = sendAccount?.channel_access_token || c.env.LINE_CHANNEL_ACCESS_TOKEN;
     const lineClient = new LineClient(accessToken);
     const messageType = body.messageType ?? 'text';
 
