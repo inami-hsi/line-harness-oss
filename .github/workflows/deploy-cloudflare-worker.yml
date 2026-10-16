@@ -58,7 +58,35 @@ jobs:
             fi
           done
 
-      - name: Build Worker and LIFF assets
+      - name: Build Admin and LIFF artifacts for version identity
+        run: |
+          pnpm --filter web build
+          pnpm --filter liff build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          VITE_LIFF_ID: ${{ vars.VITE_LIFF_ID }}
+          VITE_BOT_BASIC_ID: ${{ vars.VITE_BOT_BASIC_ID }}
+          VITE_CALENDAR_CONNECTION_ID: ${{ vars.VITE_CALENDAR_CONNECTION_ID }}
+
+      - name: Build Worker (first pass)
+        run: pnpm --filter worker build
+        env:
+          VITE_LIFF_ID: ${{ vars.VITE_LIFF_ID }}
+          VITE_BOT_BASIC_ID: ${{ vars.VITE_BOT_BASIC_ID }}
+          VITE_CALENDAR_CONNECTION_ID: ${{ vars.VITE_CALENDAR_CONNECTION_ID }}
+
+      - name: Inject production version identity
+        run: |
+          version=$(node -p "require('./apps/worker/package.json').version")
+          pnpm tsx apps/worker/scripts/inject-version.ts \
+            --version "$version" \
+            --worker apps/worker/dist/line_harness/index.js \
+            --worker-assets apps/worker/dist/client \
+            --admin apps/web/out \
+            --liff apps/liff/dist \
+            --out apps/worker/src/_version.ts
+
+      - name: Rebuild Worker with production version identity
         run: pnpm --filter worker build
         env:
           VITE_LIFF_ID: ${{ vars.VITE_LIFF_ID }}
