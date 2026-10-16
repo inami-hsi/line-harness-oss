@@ -1,3 +1,6 @@
+import { validateMessageContent, parseMessageGroup, packMessageItems } from '@line-crm/shared';
+import { buildMessages } from '../services/message-group.js';
+import { BroadcastDeliveryError } from '../services/broadcast-delivery-error.js';
 import { Hono } from 'hono';
 import {
   getBroadcasts,
@@ -9,6 +12,7 @@ import {
 import type { Broadcast as DbBroadcast, BroadcastMessageType, BroadcastTargetType } from '@line-crm/db';
 import { LineClient } from '@line-crm/line-sdk';
 import { processBroadcastSend, buildMessage, processQueuedBroadcasts } from '../services/broadcast.js';
+import { BroadcastSenderError, resolveBroadcastSender } from '../services/broadcast-sender.js';
 import { LinePlanQuotaError } from '../services/quota-alert.js';
 import {
   getQuotaUsage,
@@ -344,6 +348,8 @@ broadcasts.post('/api/broadcasts', async (c) => {
       );
     }
 
+    const contentError = validateMessageContent(body.messageType, body.messageContent);
+    if (contentError) return c.json({ success: false, error: contentError }, 400);
     const variableError = unsupportedVariablesError(body.messageContent);
     if (variableError) {
       return c.json({ success: false, error: variableError }, 400);
@@ -456,6 +462,10 @@ broadcasts.put('/api/broadcasts/:id', async (c) => {
       trackLinks?: boolean;
     }>();
 
+    if (body.messageContent !== undefined || body.messageType !== undefined) {
+      const contentError = validateMessageContent(body.messageType ?? existing.message_type, body.messageContent ?? existing.message_content);
+      if (contentError) return c.json({ success: false, error: contentError }, 400);
+    }
     if (body.messageContent !== undefined) {
       const variableError = unsupportedVariablesError(body.messageContent);
       if (variableError) {
@@ -575,6 +585,13 @@ broadcasts.post('/api/broadcasts/:id/send', async (c) => {
     if (!existing) {
       return c.json({ success: false, error: 'Broadcast not found' }, 404);
     }
+
+    if (existing.status !== 'draft' && existing.status !== 'scheduled') {
+      return c.json({ success: false, error: 'Broadcast is already sent or sending' }, 409);
+    }
+    const lineClient = await resolveBroadcastSender(
+      c.env.DB, existing, new LineClient(c.env.LINE_CHANNEL_ACCESS_TOKEN),
+    );
 
     const variableError = unsupportedVariablesError(existing.message_content);
     if (variableError) {
@@ -771,14 +788,6 @@ broadcasts.post('/api/broadcasts/:id/send', async (c) => {
     // 500人以下またはtarget_type='all'は即時送信
     // accessToken 解決は lock 前に行う (setup 失敗時に status='sending' で stuck しないため、
     // 即時送信パスには recoverStalledBroadcasts がない)
-    let accessToken = c.env.LINE_CHANNEL_ACCESS_TOKEN;
-    const broadcastAccountId = (existing as unknown as Record<string, unknown>).line_account_id;
-    if (broadcastAccountId) {
-      const { getLineAccountById } = await import('@line-crm/db');
-      const account = await getLineAccountById(c.env.DB, broadcastAccountId as string);
-      if (account) accessToken = account.channel_access_token;
-    }
-    const lineClient = new LineClient(accessToken);
 
     // atomic lock — 'draft' と 'scheduled' を分けて単一 UPDATE で claim する。
     // 各 UPDATE は単一 write statement なので read-then-write transaction の
@@ -808,6 +817,7 @@ broadcasts.post('/api/broadcasts/:id/send', async (c) => {
     try {
       await processBroadcastSend(c.env.DB, lineClient, id, c.env.WORKER_URL);
     } catch (err) {
+      if (err instanceof BroadcastDeliveryError) throw err;
       await c.env.DB.prepare(
         `UPDATE broadcasts SET status = ? WHERE id = ? AND status = 'sending'`
       ).bind(claimedStatus, id).run();
@@ -817,6 +827,8 @@ broadcasts.post('/api/broadcasts/:id/send', async (c) => {
     const result = await getBroadcastById(c.env.DB, id);
     return c.json({ success: true, data: result ? serializeBroadcast(result) : null });
   } catch (err) {
+    if (err instanceof BroadcastDeliveryError) return c.json({ success: false, error: err.message }, 502);
+    if (err instanceof BroadcastSenderError) return c.json({ success: false, error: err.message }, 400);
     // LINE プランのクォータ不足ガード (services/broadcast.ts) の typed error。
     // オペレーターには 500 ではなく理由を返す (詳細は broadcasts.last_error にも
     // 記録済み)。
@@ -846,6 +858,13 @@ broadcasts.post('/api/broadcasts/:id/send-segment', async (c) => {
         400,
       );
     }
+
+    if (existing.status !== 'draft' && existing.status !== 'scheduled') {
+      return c.json({ success: false, error: 'Broadcast is already sent or sending' }, 409);
+    }
+    await resolveBroadcastSender(
+      c.env.DB, existing, new LineClient(c.env.LINE_CHANNEL_ACCESS_TOKEN),
+    );
 
     const variableError = unsupportedVariablesError(existing.message_content);
     if (variableError) {
@@ -910,6 +929,8 @@ broadcasts.post('/api/broadcasts/:id/send-segment', async (c) => {
     const result = await getBroadcastById(c.env.DB, id);
     return c.json({ success: true, data: result ? serializeBroadcast(result) : null, queued: true, message: 'Broadcast queued for batch processing by Cron' }, 202);
   } catch (err) {
+    if (err instanceof BroadcastDeliveryError) return c.json({ success: false, error: err.message }, 502);
+    if (err instanceof BroadcastSenderError) return c.json({ success: false, error: err.message }, 400);
     console.error('POST /api/broadcasts/:id/send-segment error:', err);
     return c.json({ success: false, error: 'Internal server error' }, 500);
   }
@@ -1146,7 +1167,10 @@ broadcasts.post('/api/broadcasts/:id/test-send', async (c) => {
 
     // Build message with test label
     let messageContent = broadcast.message_content;
-    if (broadcast.message_type === 'text') {
+    const group = parseMessageGroup(messageContent);
+    if (group) {
+      messageContent = packMessageItems(group.map(item => item.messageType === 'text' ? { ...item, messageContent: `【テスト配信】\n${item.messageContent}` } : item)).messageContent;
+    } else if (broadcast.message_type === 'text') {
       messageContent = `【テスト配信】\n${messageContent}`;
     }
 
@@ -1178,8 +1202,8 @@ broadcasts.post('/api/broadcasts/:id/test-send', async (c) => {
         assertNoUnresolvedBroadcastVariables(renderedContent);
         const altText = raw.alt_text as string
           || (tracked.messageType === 'flex' ? extractFlexAltText(renderedContent) : undefined);
-        const message = buildMessage(tracked.messageType, renderedContent, altText);
-        await lineClient.pushMessage(friend.line_user_id, [message]);
+        const messages = buildMessages(tracked.messageType, renderedContent, buildMessage, altText);
+        await lineClient.pushMessage(friend.line_user_id, messages);
         sent++;
         await c.env.DB.prepare(
           `INSERT INTO messages_log (id, friend_id, direction, message_type, content, broadcast_id, delivery_type, source, created_at)
