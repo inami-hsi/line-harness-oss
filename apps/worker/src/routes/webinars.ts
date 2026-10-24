@@ -71,6 +71,7 @@ const webinarRoutes = new Hono<Env>();
 const COMMENT_MAX = 500;
 const SESSION_COMMENT_LIMIT = 60;
 const TOKEN_GRACE_SECONDS = 3600;
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
 // 開始後もこの秒数までは、その回を予約して途中参加できる。
 // ただし未予約者へ再生トークンは一切返さず、必ず予約を先に通す。
 const CURRENT_SESSION_JOIN_GRACE_SECONDS = 5 * 60;
@@ -132,6 +133,62 @@ async function loadActiveWebinar(
 // ----------------------------------------------------------------
 // LIFF: 視聴状態
 // ----------------------------------------------------------------
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[char]!);
+}
+
+// Public landing page: it only exposes an active, account-bound webinar and
+// hands the actual login, friend-add check, and reservation to its LIFF flow.
+webinarRoutes.get('/lp/webinar/:slug', async (c) => {
+  const slug = c.req.param('slug');
+  if (!SLUG_RE.test(slug)) return c.notFound();
+
+  const loaded = await loadActiveWebinar(c, slug);
+  if (loaded instanceof Response || !loaded.webinar.account_id) return c.notFound();
+
+  const account = await getLineAccountById(c.env.DB, loaded.webinar.account_id);
+  if (!account?.liff_id) return c.notFound();
+
+  const liffParams = new URLSearchParams({
+    page: 'webinar', slug: loaded.webinar.slug, liffId: account.liff_id,
+  });
+  const reservationUrl = `https://liff.line.me/${encodeURIComponent(account.liff_id)}/?${liffParams}`;
+  const title = escapeHtml(loaded.webinar.title);
+
+  return c.html(`<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${title} | オンラインウェビナー</title>
+  <meta name="description" content="${title}の参加予約ページです。">
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; }
+    body { margin: 0; min-height: 100svh; display: grid; place-items: center; background: #0f1b2d; color: #f8fafc; }
+    main { width: min(640px, calc(100% - 40px)); text-align: center; padding: 72px 0; }
+    .eyebrow { color: #86efac; font-size: .85rem; font-weight: 700; letter-spacing: .12em; }
+    h1 { margin: 18px 0 16px; font-size: clamp(2rem, 7vw, 3.5rem); line-height: 1.25; }
+    p { color: #cbd5e1; line-height: 1.8; }
+    a { display: block; margin: 36px 0 18px; padding: 20px; border-radius: 999px; background: #06c755; color: #fff; font-size: 1.15rem; font-weight: 800; text-decoration: none; box-shadow: 0 12px 28px #0005; }
+    small { color: #94a3b8; line-height: 1.7; }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">ONLINE WEBINAR</div>
+  <h1>${title}</h1>
+  <p>LINEから参加予約できます。</p>
+  <a href="${escapeHtml(reservationUrl)}">LINEで参加予約する</a>
+  <small>LINEログイン後、友だち追加がお済みでない場合は追加のご案内を表示します。<br>追加後に予約が完了し、開始前のお知らせをLINEでお届けします。</small>
+</main></body>
+</html>`, 200, {
+    'Cache-Control': 'no-store',
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+    'Referrer-Policy': 'no-referrer',
+  });
+});
 
 webinarRoutes.get('/api/liff/webinars/:slug', async (c) => {
   try {
@@ -724,8 +781,6 @@ webinarRoutes.get('/webinar-assets/:token/:slug/*', async (c) => {
 // ----------------------------------------------------------------
 // Admin API (/api/webinars/*) — 既存 authMiddleware がカバー
 // ----------------------------------------------------------------
-
-const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
 
 function serializeWebinar(row: Webinar) {
   return {

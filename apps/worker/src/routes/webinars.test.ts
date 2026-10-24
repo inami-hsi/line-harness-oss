@@ -158,6 +158,33 @@ beforeEach(() => {
   });
 });
 
+describe('GET /lp/webinar/:slug', () => {
+  test('active account-bound webinar renders a safe LIFF reservation link', async () => {
+    dbMocks.getWebinarBySlug.mockResolvedValue(makeWebinar({
+      account_id: 'acc-b',
+      title: '<script>alert(1)</script>',
+    }));
+    dbMocks.getLineAccountById.mockResolvedValue({ id: 'acc-b', liff_id: '2012170425-3INgarTl' });
+
+    const res = await req('/lp/webinar/test-webinar');
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('https://liff.line.me/2012170425-3INgarTl/?page=webinar&amp;slug=test-webinar&amp;liffId=2012170425-3INgarTl');
+    expect(body).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(body).not.toContain('<script>alert(1)</script>');
+    expect(res.headers.get('cache-control')).toBe('no-store');
+  });
+
+  test('does not expose legacy or inactive webinars', async () => {
+    dbMocks.getWebinarBySlug.mockResolvedValue(makeWebinar({ account_id: null }));
+    expect((await req('/lp/webinar/test-webinar')).status).toBe(404);
+
+    dbMocks.getWebinarBySlug.mockResolvedValue(makeWebinar({ status: 'draft', account_id: 'acc-b' }));
+    expect((await req('/lp/webinar/test-webinar')).status).toBe(404);
+  });
+});
+
 describe('GET /api/liff/webinars/:slug', () => {
   test('ライブ中は offset とプレイリスト URL とコメントを返す', async () => {
     const res = await req('/api/liff/webinars/test-webinar', {
