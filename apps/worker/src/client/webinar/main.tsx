@@ -198,6 +198,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
   const [state, setState] = useState<WebinarState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ended, setEnded] = useState(false);
+  const endedRef = useRef(false);
   const [needsTap, setNeedsTap] = useState(false);
   const [countdown, setCountdown] = useState('');
   // ライブ参加ゲート: 予約した回だけ再生する。未予約なら開始直後でも予約画面。
@@ -232,6 +233,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
   stateRef.current = state;
 
   const finishPlayback = useCallback(() => {
+    endedRef.current = true;
     videoRef.current?.pause();
     setEnded(true);
   }, []);
@@ -265,6 +267,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
         (admissionSession ? `?sessionStartAt=${encodeURIComponent(admissionSession)}` : '');
       const s = await apiGet<WebinarState>(path, ctx);
       if (s.live) {
+        endedRef.current = false;
         setEnded(false);
         t0Ref.current = performance.now();
         baseOffsetRef.current = s.offsetSeconds;
@@ -384,10 +387,11 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
       // 追いつかせる)。配信終了後・バックグラウンド・プレビュー (controls あり)
       // は対象外。
       const onPause = () => {
-        if (IS_PREVIEW || src.replay) return;
+        if (IS_PREVIEW || src.replay || endedRef.current) return;
         if (document.visibilityState !== 'visible') return;
         if (expectedPosition() >= src.durationSeconds) return;
         setTimeout(() => {
+          if (cancelled || endedRef.current) return;
           if (!v.paused || document.visibilityState !== 'visible') return;
           if (expectedPosition() >= src.durationSeconds) return;
           void v.play().catch(() => undefined);

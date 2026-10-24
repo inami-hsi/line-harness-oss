@@ -6,6 +6,8 @@ const source = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8');
 describe('webinar playback end contract', () => {
   it('finishes on the media ended event and stops live synchronization effects', () => {
     expect(source).toContain('onEnded={finishPlayback}');
+    expect(source).toContain('endedRef.current = true;');
+    expect(source).toContain('if (cancelled || endedRef.current) return;');
     expect(source.match(/if \(!state\?\.live \|\| !joined \|\| ended\) return;/g)).toHaveLength(2);
     expect(source).toMatch(/finishPlayback\(\);\s+clearInterval\(timer\);/);
   });
