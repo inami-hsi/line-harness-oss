@@ -2166,6 +2166,12 @@ export type WebinarLandingSection =
 
 export type WebinarInput = Partial<Omit<Webinar, 'id' | 'createdAt' | 'updatedAt'>>
 
+export type WebinarLandingGenerationInput = {
+  keywords: string
+  sourceText: string
+  tone: 'professional' | 'friendly' | 'premium'
+}
+
 export type WebinarSakuraComment = { id?: string; atSeconds: number; authorName: string; body: string }
 
 export type WebinarAnalytics = {
@@ -2245,6 +2251,10 @@ export const webinarApi = {
     fetchApi<{ data: Webinar }>('/api/webinars', { method: 'POST', body: JSON.stringify(input) }),
   update: (id: string, input: WebinarInput) =>
     fetchApi<{ data: Webinar }>(`/api/webinars/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
+  generateLandingPage: (id: string, input: WebinarLandingGenerationInput) =>
+    fetchApi<{ data: WebinarLandingPage }>(`/api/webinars/${id}/landing-page/generate`, {
+      method: 'POST', body: JSON.stringify(input),
+    }),
   remove: (id: string) => fetchApi<{ data: null }>(`/api/webinars/${id}`, { method: 'DELETE' }),
   comments: (id: string) =>
     fetchApi<{ data: WebinarSakuraComment[] }>(`/api/webinars/${id}/comments`),

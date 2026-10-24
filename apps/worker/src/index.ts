@@ -93,6 +93,7 @@ export type Env = {
     DB: D1Database;
     IMAGES: R2Bucket;
     ASSETS: Fetcher;
+    AI?: { run(model: string, input: Record<string, unknown>): Promise<unknown> };
     LINE_CHANNEL_SECRET: string;
     LINE_CHANNEL_ACCESS_TOKEN: string;
     API_KEY: string;

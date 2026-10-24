@@ -17,6 +17,9 @@ account_id = "YOUR_DEV_ACCOUNT_ID"
 [cache]
 enabled = true
 
+[ai]
+binding = "AI"
+
 [assets]
 directory = "dist/client"
 binding = "ASSETS"
@@ -93,6 +96,9 @@ compatibility_flags = ["nodejs_compat"]
 
 [env.production.cache]
 enabled = false
+
+[env.production.ai]
+binding = "AI"
 
 [env.production.assets]
 directory = "dist/client"

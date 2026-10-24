@@ -851,6 +851,26 @@ const spec = {
       },
       delete: { tags: ['Webinars'], summary: 'ウェビナー削除', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'Deleted' } } },
     },
+    '/api/webinars/{id}/landing-page/generate': {
+      post: {
+        tags: ['Webinars'],
+        summary: 'AIで外部LPの下書きを生成',
+        description: 'Workers AIで構造化された下書きを返す。保存は行わない。',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: {
+            type: 'object',
+            properties: {
+              keywords: { type: 'string', maxLength: 1000 },
+              sourceText: { type: 'string', maxLength: 6000 },
+              tone: { type: 'string', enum: ['professional', 'friendly', 'premium'] },
+            },
+          } } },
+        },
+        responses: { '200': { description: 'Generated landing-page draft' }, '400': { description: 'Invalid input' }, '503': { description: 'AI unavailable' } },
+      },
+    },
     '/api/webinars/{id}/assets/{revision}/{path}': {
       put: {
         tags: ['Webinars'],

@@ -7,6 +7,7 @@ import { Input, InputArea } from '@cloudflare/kumo/components/input'
 import ImageUploader, { type ImageUploaderValue } from '@/components/shared/image-uploader'
 import { getApiBase } from '@/lib/api-base'
 import { webinarApi, type Webinar, type WebinarLandingPage, type WebinarLandingSection } from '@/lib/api'
+import { mergeGeneratedLandingPage } from './webinar-landing-page-generation'
 
 const SECTIONS: { id: WebinarLandingSection; label: string }[] = [
   { id: 'problems', label: '悩み・課題' }, { id: 'solution', label: '解決策' },
@@ -37,7 +38,13 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
 export default function WebinarLandingPageForm({ webinar }: { webinar: Webinar }) {
   const [page, setPage] = useState<WebinarLandingPage>(() => initialPage(webinar))
   const [saving, setSaving] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [generationMessage, setGenerationMessage] = useState<string | null>(null)
+  const [generationKeywords, setGenerationKeywords] = useState('')
+  const [generationSource, setGenerationSource] = useState('')
+  const [generationTone, setGenerationTone] = useState<'professional' | 'friendly' | 'premium'>('professional')
+  const [generationMode, setGenerationMode] = useState<'empty' | 'all'>('empty')
   const [previewMobile, setPreviewMobile] = useState(true)
   const problems = useMemo(() => pad(page.problems, 3), [page.problems])
   const benefits = useMemo(() => pad(page.benefits, 3), [page.benefits])
@@ -54,6 +61,22 @@ export default function WebinarLandingPageForm({ webinar }: { webinar: Webinar }
     const next = [...page.sectionOrder]
     ;[next[index], next[target]] = [next[target]!, next[index]!]
     setPage((prev) => ({ ...prev, sectionOrder: next }))
+  }
+
+  const generate = async () => {
+    if (!generationKeywords.trim() && !generationSource.trim()) {
+      setGenerationMessage('キーワードまたは元になる文章を入力してください。'); return
+    }
+    setGenerating(true); setGenerationMessage(null)
+    try {
+      const { data } = await webinarApi.generateLandingPage(webinar.id, {
+        keywords: generationKeywords.trim(), sourceText: generationSource.trim(), tone: generationTone,
+      })
+      setPage((current) => mergeGeneratedLandingPage(current, data, generationMode))
+      setGenerationMessage('AIの下書きを反映しました。内容を確認してから保存してください。')
+    } catch {
+      setGenerationMessage('AI生成に失敗しました。時間をおいて、もう一度お試しください。')
+    } finally { setGenerating(false) }
   }
 
   const save = async () => {
@@ -93,6 +116,26 @@ export default function WebinarLandingPageForm({ webinar }: { webinar: Webinar }
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">
       <div className="space-y-5">
+        <Card title="AIで下書きを作成">
+          <p className="text-sm text-slate-600">キーワードや元になる文章から各セクションを作成します。生成結果は自動保存されません。</p>
+          <InputArea label="キーワード・要望" value={generationKeywords} maxLength={1000} rows={3} placeholder="例：中小企業向け、生成AI、業務効率化、初心者にも分かりやすく" onChange={(e) => setGenerationKeywords(e.target.value)} />
+          <InputArea label="事実情報・元になる文章" value={generationSource} maxLength={6000} rows={6} placeholder="サービス説明、講師プロフィール、実際のお客様の声、開催条件など。記載のない事実はAIに作らせません。" onChange={(e) => setGenerationSource(e.target.value)} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm font-medium text-slate-700">文体
+              <select value={generationTone} onChange={(e) => setGenerationTone(e.target.value as typeof generationTone)} className="mt-2 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                <option value="professional">信頼感・専門的</option><option value="friendly">親しみやすい</option><option value="premium">上質・プレミアム</option>
+              </select>
+            </label>
+            <label className="block text-sm font-medium text-slate-700">反映範囲
+              <select value={generationMode} onChange={(e) => setGenerationMode(e.target.value as typeof generationMode)} className="mt-2 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2">
+                <option value="empty">空欄だけ埋める</option><option value="all">入力済みの文章も置き換える</option>
+              </select>
+            </label>
+          </div>
+          <Button variant="primary" onClick={() => void generate()} disabled={generating} loading={generating}>AIで下書きを作成</Button>
+          {generationMessage && <p className="text-sm text-slate-700" role="status">{generationMessage}</p>}
+          <p className="text-xs text-amber-700">講師経歴・実績・参加者の声は、上の元文章に記載された事実だけを使用します。</p>
+        </Card>
         <Card title="公開・デザイン">
           <Checkbox label="外部LPを公開する" checked={page.enabled} onCheckedChange={(enabled) => setPage((prev) => ({ ...prev, enabled }))} />
           <label className="block text-sm font-medium text-slate-700">テンプレート

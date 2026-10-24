@@ -120,6 +120,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   // ライブ開始3分後（予約済み本人が途中参加できる5分窓内）
   vi.setSystemTime(new Date((SESSION_START + 180) * 1000));
+  delete (env as typeof env & { AI?: unknown }).AI;
   authMock.verifyCallerLineUserId.mockResolvedValue('U123');
   dbMocks.getFriendByLineUserId.mockResolvedValue({ id: 'friend-1' });
   dbMocks.getFriendByLineUserIdForAccount.mockResolvedValue({ id: 'friend-1' });
@@ -1008,6 +1009,49 @@ describe('admin CRUD', () => {
     });
     expect(res.status).toBe(400);
     expect(dbMocks.updateWebinar).not.toHaveBeenCalled();
+  });
+
+  test('POST landing-page/generate returns a validated draft without saving it', async () => {
+    dbMocks.getWebinarById.mockResolvedValue(makeWebinar({ title: 'AI活用ウェビナー' }));
+    const run = vi.fn().mockResolvedValue({
+      response: {
+        template: 'dark', eyebrow: 'ONLINE WEBINAR', headline: 'AI活用を実務へ',
+        description: '初心者向けの解説です。', problems: ['時間が足りない', '始め方が分からない'],
+        solutionTitle: '実践方法を解説', solutionBody: '具体的な進め方を紹介します。',
+        benefits: ['基本が分かる', '進め方が分かる'], instructorName: '', instructorBio: '',
+        testimonials: [], eventDetails: 'オンライン開催',
+        faqs: [{ question: '初心者でも参加できますか？', answer: '参加できます。' }],
+        notice: '通信環境をご確認ください。', ctaLabel: 'LINEで参加予約する',
+        sectionOrder: ['problems', 'solution', 'benefits', 'cta', 'instructor', 'testimonials', 'details', 'faq', 'notice'],
+      },
+    });
+    (env as typeof env & { AI: { run: typeof run } }).AI = { run };
+
+    const res = await reqAsStaff('/api/webinars/w1/landing-page/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keywords: '生成AI, 業務効率化', sourceText: '', tone: 'professional' }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { headline: string; testimonials: unknown[] } };
+    expect(body.data.headline).toBe('AI活用を実務へ');
+    expect(body.data.testimonials).toEqual([]);
+    expect(dbMocks.updateWebinar).not.toHaveBeenCalled();
+    expect(run).toHaveBeenCalledOnce();
+  });
+
+  test('POST landing-page/generate requires source text and an AI binding', async () => {
+    dbMocks.getWebinarById.mockResolvedValue(makeWebinar());
+    const unavailable = await reqAsStaff('/api/webinars/w1/landing-page/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    expect(unavailable.status).toBe(503);
+
+    (env as typeof env & { AI: { run: ReturnType<typeof vi.fn> } }).AI = { run: vi.fn() };
+    const missing = await reqAsStaff('/api/webinars/w1/landing-page/generate', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    expect(missing.status).toBe(400);
   });
 
   // Regression: POST /api/webinars was the one door requireRole('owner',
