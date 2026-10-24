@@ -2129,10 +2129,26 @@ export type Webinar = {
   durationSeconds: number
   schedule: WebinarScheduleRule[]
   cta: { label: string; url: string; showAtSeconds: number } | null
+  /** Optional while an older Worker is still serving during a rolling deploy. */
+  landingPage?: WebinarLandingPage
   tagOnAttend: string | null
   tagOnCtaClick: string | null
   createdAt: string
   updatedAt: string
+}
+
+export type WebinarLandingPage = {
+  enabled: boolean
+  heroImageUrl: string | null
+  eyebrow: string
+  headline: string
+  description: string
+  benefits: string[]
+  instructorName: string
+  instructorBio: string
+  notice: string
+  ctaLabel: string
+  accentColor: string
 }
 
 export type WebinarInput = Partial<Omit<Webinar, 'id' | 'createdAt' | 'updatedAt'>>

@@ -140,6 +140,92 @@ function escapeHtml(value: string): string {
   })[char]!);
 }
 
+interface WebinarLandingPage {
+  enabled: boolean;
+  heroImageUrl: string | null;
+  eyebrow: string;
+  headline: string;
+  description: string;
+  benefits: string[];
+  instructorName: string;
+  instructorBio: string;
+  notice: string;
+  ctaLabel: string;
+  accentColor: string;
+}
+
+function defaultLandingPage(title: string): WebinarLandingPage {
+  return {
+    enabled: true,
+    heroImageUrl: null,
+    eyebrow: 'ONLINE WEBINAR',
+    headline: title,
+    description: 'LINEから参加予約できます。',
+    benefits: [],
+    instructorName: '',
+    instructorBio: '',
+    notice: '',
+    ctaLabel: 'LINEで参加予約する',
+    accentColor: '#06c755',
+  };
+}
+
+function validateLandingPage(raw: unknown, title: string): WebinarLandingPage | string {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return 'invalid_landing_page';
+  const value = raw as Record<string, unknown>;
+  const defaults = defaultLandingPage(title);
+  const text = (key: keyof WebinarLandingPage, max: number, fallback = ''): string | null => {
+    const item = value[key];
+    if (item === undefined) return fallback;
+    if (typeof item !== 'string' || item.length > max) return null;
+    return item.trim();
+  };
+  const heroImageUrl = value.heroImageUrl === null || value.heroImageUrl === undefined
+    ? ''
+    : text('heroImageUrl', 2048);
+  const eyebrow = text('eyebrow', 60, defaults.eyebrow);
+  const headline = text('headline', 120, title);
+  const description = text('description', 2000, defaults.description);
+  const instructorName = text('instructorName', 80);
+  const instructorBio = text('instructorBio', 1000);
+  const notice = text('notice', 1000);
+  const ctaLabel = text('ctaLabel', 40, defaults.ctaLabel);
+  const accentColor = text('accentColor', 7, defaults.accentColor);
+  if ([heroImageUrl, eyebrow, headline, description, instructorName, instructorBio, notice, ctaLabel, accentColor].includes(null)) {
+    return 'invalid_landing_page';
+  }
+  if (typeof value.enabled !== 'undefined' && typeof value.enabled !== 'boolean') return 'invalid_landing_page';
+  if (heroImageUrl) {
+    try {
+      if (new URL(heroImageUrl).protocol !== 'https:') return 'invalid_landing_page_image';
+    } catch {
+      return 'invalid_landing_page_image';
+    }
+  }
+  if (!headline || !ctaLabel || !/^#[0-9a-fA-F]{6}$/.test(accentColor!)) return 'invalid_landing_page';
+  if (!Array.isArray(value.benefits) || value.benefits.length > 6 || value.benefits.some((item) => typeof item !== 'string' || item.length > 160)) {
+    if (value.benefits !== undefined) return 'invalid_landing_page_benefits';
+  }
+  return {
+    enabled: value.enabled !== false,
+    heroImageUrl: heroImageUrl || null,
+    eyebrow: eyebrow!, headline: headline!, description: description!,
+    benefits: Array.isArray(value.benefits) ? value.benefits.map((item) => String(item).trim()).filter(Boolean) : [],
+    instructorName: instructorName!, instructorBio: instructorBio!, notice: notice!,
+    ctaLabel: ctaLabel!, accentColor: accentColor!,
+  };
+}
+
+function parseLandingPage(raw: string | null, title: string): WebinarLandingPage {
+  if (!raw) return defaultLandingPage(title);
+  try {
+    const parsed = validateLandingPage(JSON.parse(raw), title);
+    return typeof parsed === 'string' ? defaultLandingPage(title) : parsed;
+  } catch {
+    return defaultLandingPage(title);
+  }
+}
+
 // Public landing page: it only exposes an active, account-bound webinar and
 // hands the actual login, friend-add check, and reservation to its LIFF flow.
 webinarRoutes.get('/lp/webinar/:slug', async (c) => {
@@ -152,11 +238,25 @@ webinarRoutes.get('/lp/webinar/:slug', async (c) => {
   const account = await getLineAccountById(c.env.DB, loaded.webinar.account_id);
   if (!account?.liff_id) return c.notFound();
 
+  const landing = parseLandingPage(loaded.webinar.landing_page_json, loaded.webinar.title);
+  if (!landing.enabled) return c.notFound();
+
   const liffParams = new URLSearchParams({
     page: 'webinar', slug: loaded.webinar.slug, liffId: account.liff_id,
   });
   const reservationUrl = `https://liff.line.me/${encodeURIComponent(account.liff_id)}/?${liffParams}`;
-  const title = escapeHtml(loaded.webinar.title);
+  const title = escapeHtml(landing.headline);
+  const description = escapeHtml(landing.description);
+  const hero = landing.heroImageUrl
+    ? `<img class="hero" src="${escapeHtml(landing.heroImageUrl)}" alt="${title}">`
+    : '';
+  const benefits = landing.benefits.length > 0
+    ? `<section class="benefits"><h2>このウェビナーで得られること</h2><ul>${landing.benefits.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></section>`
+    : '';
+  const instructor = landing.instructorName || landing.instructorBio
+    ? `<section><h2>講師</h2><h3>${escapeHtml(landing.instructorName)}</h3><p>${escapeHtml(landing.instructorBio)}</p></section>`
+    : '';
+  const notice = landing.notice ? `<p class="notice">${escapeHtml(landing.notice)}</p>` : '';
 
   return c.html(`<!doctype html>
 <html lang="ja">
@@ -164,28 +264,40 @@ webinarRoutes.get('/lp/webinar/:slug', async (c) => {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title} | オンラインウェビナー</title>
-  <meta name="description" content="${title}の参加予約ページです。">
+  <meta name="description" content="${escapeHtml(landing.description.slice(0, 160))}">
+  ${landing.heroImageUrl ? `<meta property="og:image" content="${escapeHtml(landing.heroImageUrl)}">` : ''}
   <style>
-    :root { color-scheme: dark; font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; }
-    body { margin: 0; min-height: 100svh; display: grid; place-items: center; background: #0f1b2d; color: #f8fafc; }
-    main { width: min(640px, calc(100% - 40px)); text-align: center; padding: 72px 0; }
-    .eyebrow { color: #86efac; font-size: .85rem; font-weight: 700; letter-spacing: .12em; }
+    :root { color-scheme: dark; font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; --accent: ${landing.accentColor}; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100svh; background: #0f1b2d; color: #f8fafc; }
+    main { width: min(720px, calc(100% - 40px)); margin: auto; text-align: center; padding: 56px 0 72px; }
+    .hero { width: 100%; max-height: 420px; object-fit: cover; border-radius: 24px; margin-bottom: 36px; box-shadow: 0 18px 50px #0006; }
+    .eyebrow { color: var(--accent); font-size: .85rem; font-weight: 700; letter-spacing: .12em; }
     h1 { margin: 18px 0 16px; font-size: clamp(2rem, 7vw, 3.5rem); line-height: 1.25; }
-    p { color: #cbd5e1; line-height: 1.8; }
-    a { display: block; margin: 36px 0 18px; padding: 20px; border-radius: 999px; background: #06c755; color: #fff; font-size: 1.15rem; font-weight: 800; text-decoration: none; box-shadow: 0 12px 28px #0005; }
+    h2 { margin: 0 0 20px; font-size: 1.4rem; } h3 { margin: 0 0 10px; }
+    p { color: #cbd5e1; line-height: 1.8; white-space: pre-line; }
+    section { margin-top: 32px; padding: 28px; border: 1px solid #334155; border-radius: 20px; background: #172337; text-align: left; }
+    ul { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+    li { padding-left: 28px; line-height: 1.65; position: relative; } li::before { content: '✓'; position: absolute; left: 0; color: var(--accent); font-weight: 900; }
+    a { display: block; margin: 36px 0 18px; padding: 20px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 1.15rem; font-weight: 800; text-decoration: none; box-shadow: 0 12px 28px #0005; }
+    .notice { padding: 18px; border-radius: 14px; background: #172337; font-size: .9rem; }
     small { color: #94a3b8; line-height: 1.7; }
   </style>
 </head>
 <body><main>
-  <div class="eyebrow">ONLINE WEBINAR</div>
+  ${hero}
+  <div class="eyebrow">${escapeHtml(landing.eyebrow)}</div>
   <h1>${title}</h1>
-  <p>LINEから参加予約できます。</p>
-  <a href="${escapeHtml(reservationUrl)}">LINEで参加予約する</a>
+  <p>${description}</p>
+  ${benefits}
+  ${instructor}
+  ${notice}
+  <a href="${escapeHtml(reservationUrl)}">${escapeHtml(landing.ctaLabel)}</a>
   <small>LINEログイン後、友だち追加がお済みでない場合は追加のご案内を表示します。<br>追加後に予約が完了し、開始前のお知らせをLINEでお届けします。</small>
 </main></body>
 </html>`, 200, {
     'Cache-Control': 'no-store',
-    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+    'Content-Security-Policy': "default-src 'none'; img-src https:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
     'Referrer-Policy': 'no-referrer',
   });
 });
@@ -793,6 +905,7 @@ function serializeWebinar(row: Webinar) {
     durationSeconds: row.duration_seconds,
     schedule: parseScheduleRules(row.schedule_json),
     cta: row.cta_json ? (JSON.parse(row.cta_json) as unknown) : null,
+    landingPage: parseLandingPage(row.landing_page_json, row.title),
     tagOnAttend: row.tag_on_attend,
     tagOnCtaClick: row.tag_on_cta_click,
     createdAt: row.created_at,
@@ -809,6 +922,7 @@ interface WebinarBody {
   durationSeconds?: number;
   schedule?: unknown[];
   cta?: { label?: string; url?: string; showAtSeconds?: number } | null;
+  landingPage?: WebinarLandingPage | null;
   tagOnAttend?: string | null;
   tagOnCtaClick?: string | null;
 }
@@ -853,6 +967,14 @@ function validateWebinarBody(
     }
     ctaJson = JSON.stringify({ label: label.trim(), url: url.trim(), showAtSeconds });
   }
+  let landingPageJson: string | null | undefined;
+  if (body.landingPage === null) {
+    landingPageJson = null;
+  } else if (body.landingPage !== undefined) {
+    const landingPage = validateLandingPage(body.landingPage, body.title?.trim() || 'ウェビナー');
+    if (typeof landingPage === 'string') return landingPage;
+    landingPageJson = JSON.stringify(landingPage);
+  }
   const input: Record<string, unknown> = {};
   if (body.accountId !== undefined) input.accountId = body.accountId;
   if (body.title !== undefined) input.title = body.title.trim();
@@ -866,6 +988,7 @@ function validateWebinarBody(
   }
   if (scheduleJson !== undefined) input.scheduleJson = scheduleJson;
   if (ctaJson !== undefined) input.ctaJson = ctaJson;
+  if (landingPageJson !== undefined) input.landingPageJson = landingPageJson;
   if (body.tagOnAttend !== undefined) input.tagOnAttend = body.tagOnAttend;
   if (body.tagOnCtaClick !== undefined) input.tagOnCtaClick = body.tagOnCtaClick;
   return input;

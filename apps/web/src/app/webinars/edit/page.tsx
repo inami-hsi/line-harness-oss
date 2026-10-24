@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/header'
 import WebinarForm from '@/components/webinars/webinar-form'
+import WebinarLandingPageForm from '@/components/webinars/webinar-landing-page-form'
 import { Banner } from '@cloudflare/kumo/components/banner'
 import { Button } from '@cloudflare/kumo/components/button'
 import { Checkbox } from '@cloudflare/kumo/components/checkbox'
@@ -835,6 +836,7 @@ function CtasTab({ webinarId }: { webinarId: string }) {
 const TABS = [
   ['analytics', '概要・分析'],
   ['settings', '配信設定'],
+  ['landing', '外部LP'],
   ['ctas', 'CTA・フォーム'],
   ['comments', 'コメント演出'],
 ] as const
@@ -925,6 +927,7 @@ function EditWebinarInner() {
           </div>
           <div className="bg-slate-50/40 p-4 sm:p-6 xl:p-8">
             {tab === 'settings' && <WebinarForm initial={webinar} />}
+            {tab === 'landing' && <WebinarLandingPageForm webinar={webinar} />}
             {tab === 'comments' && <CommentsTab webinarId={webinar.id} />}
             {tab === 'ctas' && <CtasTab webinarId={webinar.id} />}
             {tab === 'analytics' && <AnalyticsTab webinarId={webinar.id} durationSeconds={webinar.durationSeconds} />}

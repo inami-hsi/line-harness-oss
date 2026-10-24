@@ -786,7 +786,7 @@ const spec = {
       get: { tags: ['Webinars'], summary: 'ウェビナー取得', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'Webinar' } } },
       put: {
         tags: ['Webinars'],
-        summary: 'ウェビナー更新（公開状態・スケジュール・従来CTA）',
+        summary: 'ウェビナー更新（公開状態・スケジュール・従来CTA・外部LP）',
         description:
           'schedule は `{type:"daily",time:"HH:MM"}` / `{type:"weekly",time,days:[0-6]}` / ' +
           '`{type:"once",at:ISO8601}` の配列。時刻は JST 固定。\n\n' +
@@ -813,6 +813,24 @@ const spec = {
                       label: { type: 'string' },
                       url: { type: 'string', description: 'http(s) 必須' },
                       showAtSeconds: { type: 'number', description: '数値のみ。文字列だと invalid_cta' },
+                    },
+                  },
+                  landingPage: {
+                    type: 'object',
+                    nullable: true,
+                    description: '外部予約LP `/lp/webinar/{slug}` の表示内容。画像URLはHTTPSのみ。',
+                    properties: {
+                      enabled: { type: 'boolean' },
+                      heroImageUrl: { type: 'string', nullable: true },
+                      eyebrow: { type: 'string' },
+                      headline: { type: 'string' },
+                      description: { type: 'string' },
+                      benefits: { type: 'array', maxItems: 6, items: { type: 'string' } },
+                      instructorName: { type: 'string' },
+                      instructorBio: { type: 'string' },
+                      notice: { type: 'string' },
+                      ctaLabel: { type: 'string' },
+                      accentColor: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
                     },
                   },
                 },

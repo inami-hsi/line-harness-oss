@@ -10,6 +10,7 @@ export interface Webinar {
   duration_seconds: number;
   schedule_json: string;
   cta_json: string | null;
+  landing_page_json: string | null;
   tag_on_attend: string | null;
   tag_on_cta_click: string | null;
   created_at: string;
@@ -117,6 +118,7 @@ export interface WebinarCreateInput {
   durationSeconds?: number;
   scheduleJson?: string;
   ctaJson?: string | null;
+  landingPageJson?: string | null;
   tagOnAttend?: string | null;
   tagOnCtaClick?: string | null;
 }
@@ -142,14 +144,15 @@ export async function createWebinar(db: D1Database, input: WebinarCreateInput): 
   await db
     .prepare(
       `INSERT INTO webinars (id, account_id, title, slug, status, video_prefix,
-         duration_seconds, schedule_json, cta_json, tag_on_attend, tag_on_cta_click,
-         created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         duration_seconds, schedule_json, cta_json, landing_page_json,
+         tag_on_attend, tag_on_cta_click, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       id, input.accountId ?? null, input.title, input.slug, input.status ?? 'draft',
       input.videoPrefix ?? null, input.durationSeconds ?? 0, input.scheduleJson ?? '[]',
-      input.ctaJson ?? null, input.tagOnAttend ?? null, input.tagOnCtaClick ?? null,
+      input.ctaJson ?? null, input.landingPageJson ?? null,
+      input.tagOnAttend ?? null, input.tagOnCtaClick ?? null,
       now, now,
     )
     .run();
@@ -167,7 +170,7 @@ export async function updateWebinar(
     .prepare(
       `UPDATE webinars SET account_id = ?, title = ?, slug = ?, status = ?,
          video_prefix = ?, duration_seconds = ?, schedule_json = ?, cta_json = ?,
-         tag_on_attend = ?, tag_on_cta_click = ?, updated_at = ?
+         landing_page_json = ?, tag_on_attend = ?, tag_on_cta_click = ?, updated_at = ?
        WHERE id = ?`,
     )
     .bind(
@@ -179,6 +182,7 @@ export async function updateWebinar(
       patch.durationSeconds ?? existing.duration_seconds,
       patch.scheduleJson ?? existing.schedule_json,
       patch.ctaJson !== undefined ? patch.ctaJson : existing.cta_json,
+      patch.landingPageJson !== undefined ? patch.landingPageJson : existing.landing_page_json,
       patch.tagOnAttend !== undefined ? patch.tagOnAttend : existing.tag_on_attend,
       patch.tagOnCtaClick !== undefined ? patch.tagOnCtaClick : existing.tag_on_cta_click,
       jstNow(), id,

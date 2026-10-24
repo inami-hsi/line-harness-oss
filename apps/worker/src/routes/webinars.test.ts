@@ -78,6 +78,7 @@ function makeWebinar(over: Record<string, unknown> = {}) {
     duration_seconds: 7200,
     schedule_json: '[{"type":"once","at":"2026-07-29T20:00:00+09:00"}]',
     cta_json: '{"label":"申込","url":"https://pay.example.com","showAtSeconds":5400}',
+    landing_page_json: null,
     tag_on_attend: 'tag-attend',
     tag_on_cta_click: null,
     created_at: 'x',
@@ -181,6 +182,39 @@ describe('GET /lp/webinar/:slug', () => {
     expect((await req('/lp/webinar/test-webinar')).status).toBe(404);
 
     dbMocks.getWebinarBySlug.mockResolvedValue(makeWebinar({ status: 'draft', account_id: 'acc-b' }));
+    expect((await req('/lp/webinar/test-webinar')).status).toBe(404);
+  });
+
+  test('renders configured content and honors the publish switch', async () => {
+    dbMocks.getLineAccountById.mockResolvedValue({ id: 'acc-b', liff_id: '2012170425-3INgarTl' });
+    dbMocks.getWebinarBySlug.mockResolvedValue(makeWebinar({
+      account_id: 'acc-b',
+      landing_page_json: JSON.stringify({
+        enabled: true,
+        heroImageUrl: 'https://cdn.example.com/hero.webp',
+        eyebrow: 'SPECIAL CLASS',
+        headline: '成果につながる講座',
+        description: '説明文',
+        benefits: ['メリット1', 'メリット2'],
+        instructorName: '講師名',
+        instructorBio: 'プロフィール',
+        notice: '注意事項',
+        ctaLabel: '無料で予約する',
+        accentColor: '#123abc',
+      }),
+    }));
+    const res = await req('/lp/webinar/test-webinar');
+    const body = await res.text();
+    expect(body).toContain('成果につながる講座');
+    expect(body).toContain('https://cdn.example.com/hero.webp');
+    expect(body).toContain('メリット1');
+    expect(body).toContain('無料で予約する');
+    expect(body).toContain('--accent: #123abc');
+
+    dbMocks.getWebinarBySlug.mockResolvedValue(makeWebinar({
+      account_id: 'acc-b',
+      landing_page_json: JSON.stringify({ enabled: false }),
+    }));
     expect((await req('/lp/webinar/test-webinar')).status).toBe(404);
   });
 });
@@ -876,6 +910,69 @@ describe('admin CRUD', () => {
       body: JSON.stringify({ title: 't', slug: 'Bad Slug!' }),
     });
     expect(badSlug.status).toBe(400);
+  });
+
+  test('PUT saves validated landing-page settings', async () => {
+    dbMocks.getWebinarById.mockResolvedValue(makeWebinar());
+    dbMocks.updateWebinar.mockResolvedValue(makeWebinar());
+    const landingPage = {
+      enabled: true,
+      heroImageUrl: 'https://cdn.example.com/hero.webp',
+      eyebrow: 'ONLINE WEBINAR',
+      headline: '申込LP',
+      description: '説明',
+      benefits: ['学べること'],
+      instructorName: '講師',
+      instructorBio: 'プロフィール',
+      notice: '注意',
+      ctaLabel: 'LINEで予約',
+      accentColor: '#06c755',
+    };
+    const res = await reqAsStaff('/api/webinars/w1', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ landingPage }),
+    });
+    expect(res.status).toBe(200);
+    expect(dbMocks.updateWebinar).toHaveBeenCalledWith(
+      expect.anything(), 'w1', expect.objectContaining({ landingPageJson: JSON.stringify(landingPage) }),
+    );
+  });
+
+  test('PUT accepts a landing page without a hero image', async () => {
+    dbMocks.getWebinarById.mockResolvedValue(makeWebinar());
+    dbMocks.updateWebinar.mockResolvedValue(makeWebinar());
+    const res = await reqAsStaff('/api/webinars/w1', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        landingPage: {
+          enabled: true, heroImageUrl: null, eyebrow: 'ONLINE WEBINAR', headline: '画像なしLP',
+          description: '', benefits: [], instructorName: '', instructorBio: '', notice: '',
+          ctaLabel: 'LINEで予約', accentColor: '#06c755',
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const saved = JSON.parse(dbMocks.updateWebinar.mock.calls[0]![2].landingPageJson as string);
+    expect(saved.heroImageUrl).toBeNull();
+    expect(saved.headline).toBe('画像なしLP');
+  });
+
+  test('PUT rejects unsafe landing-page image URLs', async () => {
+    dbMocks.getWebinarById.mockResolvedValue(makeWebinar());
+    const res = await reqAsStaff('/api/webinars/w1', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        landingPage: {
+          ...{
+            enabled: true, eyebrow: 'x', headline: 'x', description: '', benefits: [],
+            instructorName: '', instructorBio: '', notice: '', ctaLabel: '予約', accentColor: '#06c755',
+          },
+          heroImageUrl: 'javascript:alert(1)',
+        },
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(dbMocks.updateWebinar).not.toHaveBeenCalled();
   });
 
   // Regression: POST /api/webinars was the one door requireRole('owner',

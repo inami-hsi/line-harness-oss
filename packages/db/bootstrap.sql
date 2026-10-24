@@ -1157,7 +1157,7 @@ CREATE TABLE IF NOT EXISTS webinars (
   tag_on_cta_click TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
-);
+, landing_page_json TEXT);
 
 CREATE INDEX IF NOT EXISTS idx_ad_conversion_logs_friend ON ad_conversion_logs (friend_id);
 
