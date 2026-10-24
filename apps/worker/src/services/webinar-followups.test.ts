@@ -46,6 +46,31 @@ describe('processWebinarFollowups', () => {
     vi.clearAllMocks();
   });
 
+  test('別アカウントの友だちにはフォロー通知を送らない', async () => {
+    const candidate = { webinar_id: 'w1', account_id: 'a1', friend_id: 'f1', slug: 'demo', form_id: 'form1' };
+    const updates: unknown[][] = [];
+    const db = {
+      prepare(sql: string) {
+        let values: unknown[] = [];
+        return {
+          bind(...v: unknown[]) { values = v; return this; },
+          async all() { return { results: sql.includes('FROM clicks c') && values[1] === 'after_30m' ? [candidate] : [] }; },
+          async first() { return sql.includes('SELECT id, retry_key, status FROM webinar_followups') ? { id: 'followup', retry_key: 'retry', status: 'pending' } : null; },
+          async run() { updates.push(values); return { success: true }; },
+        };
+      },
+    } as unknown as D1Database;
+    dbMocks.getFriendById.mockResolvedValue({ line_user_id: 'U1', line_account_id: 'a2', is_following: 1 });
+    const dispatch = vi.fn();
+    const result = await processWebinarFollowups(db, {
+      proxyBaseUrl: 'https://proxy.example.com', defaultAccessToken: 'token', defaultLiffId: 'liff', proxyDispatch: dispatch,
+    });
+    expect(result).toEqual({ sent: 0, failed: 1 });
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(dbMocks.getLineAccountById).not.toHaveBeenCalled();
+    expect(updates.some((v) => v.includes('webinar friend account mismatch'))).toBe(true);
+  });
+
   test('ブロック済みfriendを候補から除外し、選択後のブロックもpendingに残さない', async () => {
     const preparedSql: string[] = [];
     const updates: Array<{ sql: string; values: unknown[] }> = [];

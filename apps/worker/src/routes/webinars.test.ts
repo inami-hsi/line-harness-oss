@@ -122,6 +122,7 @@ beforeEach(() => {
   authMock.verifyCallerLineUserId.mockResolvedValue('U123');
   dbMocks.getFriendByLineUserId.mockResolvedValue({ id: 'friend-1' });
   dbMocks.getFriendByLineUserIdForAccount.mockResolvedValue({ id: 'friend-1' });
+  dbMocks.getLineAccountById.mockResolvedValue({ id: 'acc-b', login_channel_id: 'login-b' });
   dbMocks.getWebinarBySlug.mockResolvedValue(makeWebinar());
   dbMocks.getWebinarComments.mockResolvedValue([
     { id: 'c1', webinar_id: 'w1', at_seconds: 10, author_name: '田中', body: '楽しみ!', created_at: 'x' },
@@ -180,10 +181,28 @@ describe('GET /api/liff/webinars/:slug', () => {
 
   test('friend はウェビナーのアカウント配下の行を優先解決する', async () => {
     dbMocks.getWebinarBySlug.mockResolvedValue(makeWebinar({ account_id: 'acc-b' }));
+    dbMocks.getFriendByLineUserIdForAccount.mockResolvedValue({ id: 'friend-1', line_account_id: 'acc-b' });
     await req('/api/liff/webinars/test-webinar', { headers: { Authorization: 'Bearer t' } });
     expect(dbMocks.getFriendByLineUserIdForAccount).toHaveBeenCalledWith(
       expect.anything(), 'U123', 'acc-b',
     );
+  });
+
+  test('別アカウントの友だちにフォールバックした場合は拒否する', async () => {
+    dbMocks.getWebinarBySlug.mockResolvedValue(makeWebinar({ account_id: 'acc-b' }));
+    dbMocks.getFriendByLineUserIdForAccount.mockResolvedValue({ id: 'friend-1', line_account_id: 'acc-a' });
+    const res = await req('/api/liff/webinars/test-webinar', { headers: { Authorization: 'Bearer t' } });
+    expect(res.status).toBe(403);
+    expect(dbMocks.upsertWebinarViewer).not.toHaveBeenCalled();
+  });
+
+  test('別ログインチャネルのトークンでは参加を拒否する', async () => {
+    dbMocks.getWebinarBySlug.mockResolvedValue(makeWebinar({ account_id: 'acc-b' }));
+    authMock.verifyCallerLineUserId.mockResolvedValueOnce('U123').mockResolvedValueOnce(null);
+    const res = await req('/api/liff/webinars/test-webinar', { headers: { Authorization: 'Bearer t' } });
+    expect(res.status).toBe(401);
+    expect(authMock.verifyCallerLineUserId).toHaveBeenLastCalledWith('Bearer t', expect.anything(), 'login-b');
+    expect(dbMocks.upsertWebinarViewer).not.toHaveBeenCalled();
   });
 
   test('この回を予約済みの本人には registeredForThisSession=true を返す', async () => {

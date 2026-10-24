@@ -55,11 +55,10 @@ async function resolveDeliveryConfig(
     if (account) {
       return {
         accessToken: account.channel_access_token,
-        liffId:
-          ((account as unknown as Record<string, string | null>).liff_id as string | null) ??
-          options.defaultLiffId,
+        liffId: (account as unknown as Record<string, string | null>).liff_id ?? null,
       };
     }
+    throw new Error('webinar delivery account not found');
   }
   return {
     accessToken: options.defaultAccessToken,
@@ -83,6 +82,10 @@ export async function processWebinarReminders(
       if (!friend || !friend.is_following) {
         // ブロック済み等は送らず消化 (毎 tick 積み直さない)
         await markWebinarRegistrationNotified(db, reg.id);
+        continue;
+      }
+      if (reg.account_id && friend.line_account_id !== reg.account_id) {
+        failed++;
         continue;
       }
       const { accessToken, liffId } = await resolveDeliveryConfig(db, reg.account_id, options);
@@ -123,6 +126,7 @@ export async function sendWebinarRegistrationConfirmation(
   try {
     const friend = await getFriendById(db, friendId);
     if (!friend || !friend.is_following) return;
+    if (webinar.account_id && friend.line_account_id !== webinar.account_id) return;
     const { accessToken, liffId } = await resolveDeliveryConfig(db, webinar.account_id, options);
     if (!liffId) return;
     const admissionUrl = buildWebinarUrl(liffId, webinar.slug, sessionStartAt);

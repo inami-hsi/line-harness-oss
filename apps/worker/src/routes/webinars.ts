@@ -39,6 +39,7 @@ import {
   getWebinarFormFunnelStats,
   getFriendByLineUserId,
   getFriendByLineUserIdForAccount,
+  getLineAccountById,
   getFormById,
   type Webinar,
   upsertWebinarRegistration,
@@ -93,9 +94,7 @@ function nowEpoch(): number {
 
 // LIFF caller を認証し、webinar とそのアカウント配下の friend を解決する。
 // 認証 (401) を webinar 存在確認より先に行う (existence oracle 対策)。
-// friend はウェビナーのアカウント配下の行を優先する (同一プロバイダーの複数
-// アカウントは line_user_id が同一のため、無指定の先頭一致だと別アカウントの
-// friend 行に吸われて予約・確認プッシュ・リマインドのアカウントがズレる)。
+// 紐付け済みウェビナーは別アカウントの friend へのフォールバックを拒否する。
 async function resolveWebinarCaller(
   c: Context<Env>,
   slug: string,
@@ -104,10 +103,18 @@ async function resolveWebinarCaller(
   if (!lineUserId) return c.json({ error: 'unauthorized' }, 401);
   const loaded = await loadActiveWebinar(c, slug);
   if (loaded instanceof Response) return loaded;
+  if (loaded.webinar.account_id) {
+    const account = await getLineAccountById(c.env.DB, loaded.webinar.account_id);
+    if (!account?.login_channel_id) return c.json({ error: 'unauthorized' }, 401);
+    const scopedUserId = await verifyCallerLineUserId(c.req.header('Authorization'), c.env, account.login_channel_id);
+    if (!scopedUserId || scopedUserId !== lineUserId) return c.json({ error: 'unauthorized' }, 401);
+  }
   const friend = await getFriendByLineUserIdForAccount(
     c.env.DB, lineUserId, loaded.webinar.account_id,
   );
-  if (!friend) return c.json({ error: 'friend_not_found' }, 403);
+  if (!friend || (loaded.webinar.account_id && friend.line_account_id !== loaded.webinar.account_id)) {
+    return c.json({ error: 'friend_not_found' }, 403);
+  }
   return { webinar: loaded.webinar, friendId: friend.id };
 }
 

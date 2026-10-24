@@ -29,7 +29,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers();
   vi.setSystemTime(new Date(NOW * 1000));
-  dbMocks.getFriendById.mockResolvedValue({ id: 'friend-1', line_user_id: 'U1', is_following: 1 });
+  dbMocks.getFriendById.mockResolvedValue({ id: 'friend-1', line_user_id: 'U1', line_account_id: 'acc-1', is_following: 1 });
   dbMocks.getLineAccountById.mockResolvedValue({
     id: 'acc-1', channel_access_token: 'tok', liff_id: '111-aaa',
   });
@@ -39,6 +39,27 @@ beforeEach(() => {
 });
 
 describe('processWebinarReminders', () => {
+  test('別アカウントの友だちには送らず通知済みにしない', async () => {
+    dbMocks.getDueWebinarRegistrations.mockResolvedValue([REG]);
+    dbMocks.getFriendById.mockResolvedValue({ line_user_id: 'U1', line_account_id: 'acc-2', is_following: 1 });
+    expect(await processWebinarReminders({} as D1Database, OPTIONS)).toEqual({ sent: 0, failed: 1 });
+    expect(proxyFetch).not.toHaveBeenCalled();
+    expect(dbMocks.markWebinarRegistrationNotified).not.toHaveBeenCalled();
+  });
+
+  test('指定アカウントが存在しない場合は既定アカウントから送信しない', async () => {
+    dbMocks.getDueWebinarRegistrations.mockResolvedValue([REG]);
+    dbMocks.getLineAccountById.mockResolvedValue(null);
+    expect(await processWebinarReminders({} as D1Database, OPTIONS)).toEqual({ sent: 0, failed: 1 });
+    expect(proxyFetch).not.toHaveBeenCalled();
+  });
+
+  test('指定アカウントにLIFFがない場合は既定LIFFを使わない', async () => {
+    dbMocks.getDueWebinarRegistrations.mockResolvedValue([REG]);
+    dbMocks.getLineAccountById.mockResolvedValue({ id: 'acc-1', channel_access_token: 'tok', liff_id: null });
+    expect(await processWebinarReminders({} as D1Database, OPTIONS)).toEqual({ sent: 0, failed: 1 });
+    expect(proxyFetch).not.toHaveBeenCalled();
+  });
   test('Harness proxy 経由で送信し、成功後に notified を刻む', async () => {
     dbMocks.getDueWebinarRegistrations.mockResolvedValue([REG]);
     const result = await processWebinarReminders({} as D1Database, OPTIONS);
@@ -108,6 +129,13 @@ describe('processWebinarReminders', () => {
 });
 
 describe('sendWebinarRegistrationConfirmation', () => {
+  test('別アカウントの友だちには受付確認を送らない', async () => {
+    dbMocks.getFriendById.mockResolvedValue({ line_user_id: 'U1', line_account_id: 'acc-2', is_following: 1 });
+    await sendWebinarRegistrationConfirmation(
+      {} as D1Database, { account_id: 'acc-1', title: 'テスト', slug: 'test-webinar' }, 'friend-1', NOW + 3600, OPTIONS,
+    );
+    expect(proxyFetch).not.toHaveBeenCalled();
+  });
   test('予約直後の確認も Harness proxy 経由で送り、履歴化する', async () => {
     await sendWebinarRegistrationConfirmation(
       {} as D1Database,

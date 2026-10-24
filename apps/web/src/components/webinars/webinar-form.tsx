@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAccount } from '@/contexts/account-context'
 import { webinarApi, type Webinar, type WebinarInput, type WebinarScheduleRule } from '@/lib/api'
 import { Banner } from '@cloudflare/kumo/components/banner'
 import { Button } from '@cloudflare/kumo/components/button'
@@ -37,6 +38,7 @@ export interface WebinarFormProps {
 
 export default function WebinarForm({ initial }: WebinarFormProps) {
   const router = useRouter()
+  const { selectedAccountId } = useAccount()
   const [title, setTitle] = useState(initial?.title ?? '')
   const [slug, setSlug] = useState(initial?.slug ?? '')
   const [status, setStatus] = useState<Webinar['status']>(initial?.status ?? 'draft')
@@ -81,6 +83,10 @@ export default function WebinarForm({ initial }: WebinarFormProps) {
   const nonDailyCount = rules.length - dailyRules.length
 
   const save = async () => {
+    if (!initial && !selectedAccountId) {
+      setError('LINEアカウントを選択してから保存してください')
+      return
+    }
     setSaving(true)
     setError(null)
     const input: WebinarInput = {
@@ -99,7 +105,7 @@ export default function WebinarForm({ initial }: WebinarFormProps) {
         await webinarApi.update(initial.id, input)
         router.push('/webinars')
       } else {
-        const created = await webinarApi.create(input)
+        const created = await webinarApi.create({ ...input, accountId: selectedAccountId })
         router.push(`/webinars/edit?id=${created.data.id}`)
       }
     } catch (err) {

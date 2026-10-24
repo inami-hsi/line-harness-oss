@@ -362,9 +362,10 @@ async function deliveryConfig(
     if (account) {
       return {
         accessToken: account.channel_access_token,
-        liffId: account.liff_id ?? options.defaultLiffId,
+        liffId: account.liff_id ?? null,
       };
     }
+    throw new Error('webinar delivery account not found');
   }
   return { accessToken: options.defaultAccessToken, liffId: options.defaultLiffId };
 }
@@ -411,6 +412,9 @@ export async function processWebinarFollowups(
         ).bind(skippedAt, followup.id).run();
         continue;
       }
+      if (candidate.account_id && friend.line_account_id !== candidate.account_id) {
+        throw new Error('webinar friend account mismatch');
+      }
       const delivery = await deliveryConfig(db, candidate.account_id, options);
       if (!delivery.liffId) throw new Error('LIFF ID not configured');
       const url = formUrl(delivery.liffId, candidate.form_id);
@@ -450,6 +454,9 @@ export async function processWebinarFollowups(
            SET status = 'skipped', last_error = 'not_following', updated_at = ? WHERE id = ?`,
         ).bind(jstNow(), followup.id).run();
         continue;
+      }
+      if (candidate.account_id && friend.line_account_id !== candidate.account_id) {
+        throw new Error('webinar friend account mismatch');
       }
       const delivery = await deliveryConfig(db, candidate.account_id, options);
       if (!delivery.liffId) throw new Error('LIFF ID not configured');

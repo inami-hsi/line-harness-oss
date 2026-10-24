@@ -13,17 +13,22 @@ export interface VerifyEnv {
 export async function verifyCallerLineUserId(
   authHeader: string | undefined,
   env: VerifyEnv,
+  requiredChannelId?: string,
 ): Promise<string | null> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
   const idToken = authHeader.slice('Bearer '.length).trim();
   if (!idToken) return null;
 
   const candidates: string[] = [];
-  if (env.LINE_LOGIN_CHANNEL_ID) candidates.push(env.LINE_LOGIN_CHANNEL_ID);
-  const dbAccounts = await getLineAccounts(env.DB);
-  for (const a of dbAccounts) {
-    const ch = (a as unknown as { login_channel_id?: string | null }).login_channel_id;
-    if (ch && !candidates.includes(ch)) candidates.push(ch);
+  if (requiredChannelId) {
+    candidates.push(requiredChannelId);
+  } else {
+    if (env.LINE_LOGIN_CHANNEL_ID) candidates.push(env.LINE_LOGIN_CHANNEL_ID);
+    const dbAccounts = await getLineAccounts(env.DB);
+    for (const a of dbAccounts) {
+      const ch = (a as unknown as { login_channel_id?: string | null }).login_channel_id;
+      if (ch && !candidates.includes(ch)) candidates.push(ch);
+    }
   }
   for (const channelId of candidates) {
     const res = await fetch('https://api.line.me/oauth2/v2.1/verify', {
