@@ -231,6 +231,11 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
   const stateRef = useRef<WebinarState | null>(null);
   stateRef.current = state;
 
+  const finishPlayback = useCallback(() => {
+    videoRef.current?.pause();
+    setEnded(true);
+  }, []);
+
   const trackFunnelEvent = useCallback((
     eventType: 'cta_impression' | 'form_open' | 'form_start' | 'field_complete' |
       'submit_attempt' | 'submit_success' | 'submit_error',
@@ -260,6 +265,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
         (admissionSession ? `?sessionStartAt=${encodeURIComponent(admissionSession)}` : '');
       const s = await apiGet<WebinarState>(path, ctx);
       if (s.live) {
+        setEnded(false);
         t0Ref.current = performance.now();
         baseOffsetRef.current = s.offsetSeconds;
         commentIdxRef.current = 0;
@@ -323,7 +329,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
 
   // ライブ画面: プレーヤー初期化
   useEffect(() => {
-    if (!state?.live || !joined) return;
+    if (!state?.live || !joined || ended) return;
     const video = videoRef.current;
     if (!video) return;
     let hls: { destroy: () => void } | null = null;
@@ -400,13 +406,13 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
       cleanupVerify?.();
       hls?.destroy();
     };
-  }, [state, joined, expectedPosition]);
+  }, [state, joined, expectedPosition, ended]);
 
   // ライブ進行: ドリフト補正・サクラコメント・CTA・終了判定 (1秒 tick)
   // プレビューは video.currentTime を位置の真とし、巻き戻しシークにも追従する
   const lastTickPosRef = useRef(0);
   useEffect(() => {
-    if (!state?.live || !joined) return;
+    if (!state?.live || !joined || ended) return;
     const src = state;
     const timer = setInterval(() => {
       const video = videoRef.current;
@@ -424,8 +430,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
         video.playbackRate = rateRef.current;
       }
       if (!IS_PREVIEW && pos >= src.durationSeconds) {
-        setEnded(true);
-        video?.pause();
+        finishPlayback();
         clearInterval(timer);
         return;
       }
@@ -473,7 +478,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
       if (cards.length === 0 && src.cta && pos >= src.cta.showAtSeconds) setCtaVisible(true);
     }, 1000);
     return () => clearInterval(timer);
-  }, [state, joined, expectedPosition, trackFunnelEvent]);
+  }, [state, joined, expectedPosition, trackFunnelEvent, ended, finishPlayback]);
 
   // 待機ルーム: 開始前サクラコメント (負の atSeconds) の流し込み (1秒 tick)
   useEffect(() => {
@@ -853,7 +858,7 @@ function WebinarApp({ ctx, slug }: { ctx: WebinarContext; slug: string }) {
     <div className="flex h-dvh justify-center bg-gray-900 text-white">
       <div className="flex h-full w-full max-w-md flex-col">
       <div className="relative shrink-0">
-        <video ref={videoRef} className="w-full" playsInline />
+        <video ref={videoRef} className="w-full" playsInline onEnded={finishPlayback} />
         {!ended && (
           <span className={`absolute left-2 top-2 rounded px-2 py-0.5 text-xs font-bold ${IS_PREVIEW || state.replay ? 'bg-gray-600' : 'bg-red-600'}`}>
             {IS_PREVIEW ? 'PREVIEW' : state.replay ? 'REPLAY' : '● LIVE'}
