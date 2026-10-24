@@ -140,33 +140,57 @@ function escapeHtml(value: string): string {
   })[char]!);
 }
 
+const LANDING_SECTIONS = [
+  'problems', 'solution', 'benefits', 'cta', 'instructor',
+  'testimonials', 'details', 'faq', 'notice',
+] as const;
+type WebinarLandingSection = typeof LANDING_SECTIONS[number];
+
 interface WebinarLandingPage {
   enabled: boolean;
+  template: 'dark' | 'light' | 'gold';
   heroImageUrl: string | null;
   eyebrow: string;
   headline: string;
   description: string;
+  problems: string[];
+  solutionTitle: string;
+  solutionBody: string;
   benefits: string[];
   instructorName: string;
   instructorBio: string;
+  testimonials: { quote: string; author: string }[];
+  eventDetails: string;
+  faqs: { question: string; answer: string }[];
   notice: string;
   ctaLabel: string;
   accentColor: string;
+  sectionOrder: WebinarLandingSection[];
+  hiddenSections: WebinarLandingSection[];
 }
 
 function defaultLandingPage(title: string): WebinarLandingPage {
   return {
     enabled: true,
+    template: 'dark',
     heroImageUrl: null,
     eyebrow: 'ONLINE WEBINAR',
     headline: title,
     description: 'LINEから参加予約できます。',
+    problems: [],
+    solutionTitle: '',
+    solutionBody: '',
     benefits: [],
     instructorName: '',
     instructorBio: '',
+    testimonials: [],
+    eventDetails: '',
+    faqs: [],
     notice: '',
     ctaLabel: 'LINEで参加予約する',
     accentColor: '#06c755',
+    sectionOrder: [...LANDING_SECTIONS],
+    hiddenSections: [],
   };
 }
 
@@ -186,15 +210,20 @@ function validateLandingPage(raw: unknown, title: string): WebinarLandingPage | 
   const eyebrow = text('eyebrow', 60, defaults.eyebrow);
   const headline = text('headline', 120, title);
   const description = text('description', 2000, defaults.description);
+  const solutionTitle = text('solutionTitle', 120);
+  const solutionBody = text('solutionBody', 2000);
   const instructorName = text('instructorName', 80);
   const instructorBio = text('instructorBio', 1000);
+  const eventDetails = text('eventDetails', 1000);
   const notice = text('notice', 1000);
   const ctaLabel = text('ctaLabel', 40, defaults.ctaLabel);
   const accentColor = text('accentColor', 7, defaults.accentColor);
-  if ([heroImageUrl, eyebrow, headline, description, instructorName, instructorBio, notice, ctaLabel, accentColor].includes(null)) {
+  if ([heroImageUrl, eyebrow, headline, description, solutionTitle, solutionBody, instructorName, instructorBio, eventDetails, notice, ctaLabel, accentColor].includes(null)) {
     return 'invalid_landing_page';
   }
   if (typeof value.enabled !== 'undefined' && typeof value.enabled !== 'boolean') return 'invalid_landing_page';
+  const template = value.template ?? defaults.template;
+  if (!['dark', 'light', 'gold'].includes(String(template))) return 'invalid_landing_page_template';
   if (heroImageUrl) {
     try {
       if (new URL(heroImageUrl).protocol !== 'https:') return 'invalid_landing_page_image';
@@ -206,13 +235,47 @@ function validateLandingPage(raw: unknown, title: string): WebinarLandingPage | 
   if (!Array.isArray(value.benefits) || value.benefits.length > 6 || value.benefits.some((item) => typeof item !== 'string' || item.length > 160)) {
     if (value.benefits !== undefined) return 'invalid_landing_page_benefits';
   }
+  if (!Array.isArray(value.problems) || value.problems.length > 6 || value.problems.some((item) => typeof item !== 'string' || item.length > 160)) {
+    if (value.problems !== undefined) return 'invalid_landing_page_problems';
+  }
+  const pairs = (key: 'testimonials' | 'faqs', first: string, second: string, max: number): boolean => {
+    const items = value[key];
+    return items === undefined || (Array.isArray(items) && items.length <= max && items.every((item) =>
+      typeof item === 'object' && item !== null && !Array.isArray(item)
+      && typeof (item as Record<string, unknown>)[first] === 'string'
+      && String((item as Record<string, unknown>)[first]).length <= 1000
+      && typeof (item as Record<string, unknown>)[second] === 'string'
+      && String((item as Record<string, unknown>)[second]).length <= 1000));
+  };
+  if (!pairs('testimonials', 'quote', 'author', 4)) return 'invalid_landing_page_testimonials';
+  if (!pairs('faqs', 'question', 'answer', 6)) return 'invalid_landing_page_faqs';
+  const sectionOrder = value.sectionOrder ?? defaults.sectionOrder;
+  const hiddenSections = value.hiddenSections ?? defaults.hiddenSections;
+  if (!Array.isArray(sectionOrder) || sectionOrder.length !== LANDING_SECTIONS.length
+    || new Set(sectionOrder).size !== LANDING_SECTIONS.length
+    || sectionOrder.some((item) => !LANDING_SECTIONS.includes(item as WebinarLandingSection))) return 'invalid_landing_page_sections';
+  if (!Array.isArray(hiddenSections) || hiddenSections.some((item) => !LANDING_SECTIONS.includes(item as WebinarLandingSection))) return 'invalid_landing_page_sections';
+  const cleanPairs = (key: 'testimonials' | 'faqs', first: string, second: string) =>
+    (Array.isArray(value[key]) ? value[key] : []).map((item) => ({
+      [first]: String((item as Record<string, unknown>)[first]).trim(),
+      [second]: String((item as Record<string, unknown>)[second]).trim(),
+    })).filter((item) => item[first] || item[second]);
   return {
     enabled: value.enabled !== false,
+    template: template as WebinarLandingPage['template'],
     heroImageUrl: heroImageUrl || null,
     eyebrow: eyebrow!, headline: headline!, description: description!,
+    problems: Array.isArray(value.problems) ? value.problems.map((item) => String(item).trim()).filter(Boolean) : [],
+    solutionTitle: solutionTitle!, solutionBody: solutionBody!,
     benefits: Array.isArray(value.benefits) ? value.benefits.map((item) => String(item).trim()).filter(Boolean) : [],
-    instructorName: instructorName!, instructorBio: instructorBio!, notice: notice!,
+    instructorName: instructorName!, instructorBio: instructorBio!,
+    testimonials: cleanPairs('testimonials', 'quote', 'author') as WebinarLandingPage['testimonials'],
+    eventDetails: eventDetails!,
+    faqs: cleanPairs('faqs', 'question', 'answer') as WebinarLandingPage['faqs'],
+    notice: notice!,
     ctaLabel: ctaLabel!, accentColor: accentColor!,
+    sectionOrder: sectionOrder as WebinarLandingSection[],
+    hiddenSections: [...new Set(hiddenSections)] as WebinarLandingSection[],
   };
 }
 
@@ -250,13 +313,27 @@ webinarRoutes.get('/lp/webinar/:slug', async (c) => {
   const hero = landing.heroImageUrl
     ? `<img class="hero" src="${escapeHtml(landing.heroImageUrl)}" alt="${title}">`
     : '';
-  const benefits = landing.benefits.length > 0
-    ? `<section class="benefits"><h2>このウェビナーで得られること</h2><ul>${landing.benefits.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></section>`
+  const listSection = (heading: string, items: string[], className = '') => items.length
+    ? `<section class="${className}"><h2>${heading}</h2><ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></section>`
     : '';
-  const instructor = landing.instructorName || landing.instructorBio
-    ? `<section><h2>講師</h2><h3>${escapeHtml(landing.instructorName)}</h3><p>${escapeHtml(landing.instructorBio)}</p></section>`
-    : '';
-  const notice = landing.notice ? `<p class="notice">${escapeHtml(landing.notice)}</p>` : '';
+  const sectionHtml: Record<WebinarLandingSection, string> = {
+    problems: listSection('こんなお悩みはありませんか？', landing.problems, 'problems'),
+    solution: landing.solutionTitle || landing.solutionBody
+      ? `<section><h2>${escapeHtml(landing.solutionTitle || 'このウェビナーで解決します')}</h2><p>${escapeHtml(landing.solutionBody)}</p></section>` : '',
+    benefits: listSection('このウェビナーで得られること', landing.benefits, 'benefits'),
+    cta: `<a class="cta" href="${escapeHtml(reservationUrl)}">${escapeHtml(landing.ctaLabel)}</a>`,
+    instructor: landing.instructorName || landing.instructorBio
+      ? `<section><h2>講師</h2><h3>${escapeHtml(landing.instructorName)}</h3><p>${escapeHtml(landing.instructorBio)}</p></section>` : '',
+    testimonials: landing.testimonials.length
+      ? `<section><h2>参加者の声</h2><div class="voices">${landing.testimonials.map((item) => `<blockquote><p>${escapeHtml(item.quote)}</p><cite>${escapeHtml(item.author)}</cite></blockquote>`).join('')}</div></section>` : '',
+    details: landing.eventDetails ? `<section><h2>開催概要</h2><p>${escapeHtml(landing.eventDetails)}</p></section>` : '',
+    faq: landing.faqs.length
+      ? `<section><h2>よくある質問</h2><div class="faqs">${landing.faqs.map((item) => `<details><summary>${escapeHtml(item.question)}</summary><p>${escapeHtml(item.answer)}</p></details>`).join('')}</div></section>` : '',
+    notice: landing.notice ? `<p class="notice">${escapeHtml(landing.notice)}</p>` : '',
+  };
+  const sections = landing.sectionOrder
+    .filter((key) => !landing.hiddenSections.includes(key))
+    .map((key) => sectionHtml[key]).join('');
 
   return c.html(`<!doctype html>
 <html lang="ja">
@@ -267,32 +344,35 @@ webinarRoutes.get('/lp/webinar/:slug', async (c) => {
   <meta name="description" content="${escapeHtml(landing.description.slice(0, 160))}">
   ${landing.heroImageUrl ? `<meta property="og:image" content="${escapeHtml(landing.heroImageUrl)}">` : ''}
   <style>
-    :root { color-scheme: dark; font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; --accent: ${landing.accentColor}; }
+    :root { font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif; --accent: ${landing.accentColor}; }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100svh; background: #0f1b2d; color: #f8fafc; }
+    body { margin: 0; min-height: 100svh; background: var(--bg); color: var(--text); }
+    body.dark { --bg:#0f1b2d; --surface:#172337; --text:#f8fafc; --muted:#cbd5e1; --line:#334155; color-scheme:dark; }
+    body.light { --bg:#f8fafc; --surface:#fff; --text:#172033; --muted:#526071; --line:#dce2ea; color-scheme:light; }
+    body.gold { --bg:#0d0d0d; --surface:#181713; --text:#fffaf0; --muted:#d8d0bd; --line:#4d432b; color-scheme:dark; }
     main { width: min(720px, calc(100% - 40px)); margin: auto; text-align: center; padding: 56px 0 72px; }
     .hero { width: 100%; max-height: 420px; object-fit: cover; border-radius: 24px; margin-bottom: 36px; box-shadow: 0 18px 50px #0006; }
     .eyebrow { color: var(--accent); font-size: .85rem; font-weight: 700; letter-spacing: .12em; }
     h1 { margin: 18px 0 16px; font-size: clamp(2rem, 7vw, 3.5rem); line-height: 1.25; }
     h2 { margin: 0 0 20px; font-size: 1.4rem; } h3 { margin: 0 0 10px; }
-    p { color: #cbd5e1; line-height: 1.8; white-space: pre-line; }
-    section { margin-top: 32px; padding: 28px; border: 1px solid #334155; border-radius: 20px; background: #172337; text-align: left; }
+    p { color: var(--muted); line-height: 1.8; white-space: pre-line; }
+    section { margin-top: 32px; padding: 28px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); text-align: left; }
     ul { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
     li { padding-left: 28px; line-height: 1.65; position: relative; } li::before { content: '✓'; position: absolute; left: 0; color: var(--accent); font-weight: 900; }
-    a { display: block; margin: 36px 0 18px; padding: 20px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 1.15rem; font-weight: 800; text-decoration: none; box-shadow: 0 12px 28px #0005; }
-    .notice { padding: 18px; border-radius: 14px; background: #172337; font-size: .9rem; }
-    small { color: #94a3b8; line-height: 1.7; }
+    .cta { display: block; margin: 36px 0 18px; padding: 20px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 1.15rem; font-weight: 800; text-decoration: none; box-shadow: 0 12px 28px #0005; }
+    .notice { margin-top: 28px; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); font-size: .9rem; }
+    .voices { display:grid; gap:14px; } blockquote { margin:0; padding:18px; border-left:4px solid var(--accent); background:var(--bg); border-radius:10px; } blockquote p { margin:0 0 8px; } cite { color:var(--muted); font-size:.85rem; }
+    .faqs { display:grid; gap:10px; } details { padding:16px; border:1px solid var(--line); border-radius:12px; } summary { cursor:pointer; font-weight:700; } details p { margin:12px 0 0; }
+    small { color: var(--muted); line-height: 1.7; }
   </style>
 </head>
-<body><main>
+<body class="${landing.template}"><main>
   ${hero}
   <div class="eyebrow">${escapeHtml(landing.eyebrow)}</div>
   <h1>${title}</h1>
   <p>${description}</p>
-  ${benefits}
-  ${instructor}
-  ${notice}
-  <a href="${escapeHtml(reservationUrl)}">${escapeHtml(landing.ctaLabel)}</a>
+  ${sections}
+  <a class="cta" href="${escapeHtml(reservationUrl)}">${escapeHtml(landing.ctaLabel)}</a>
   <small>LINEログイン後、友だち追加がお済みでない場合は追加のご案内を表示します。<br>追加後に予約が完了し、開始前のお知らせをLINEでお届けします。</small>
 </main></body>
 </html>`, 200, {

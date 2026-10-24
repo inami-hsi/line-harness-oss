@@ -191,16 +191,28 @@ describe('GET /lp/webinar/:slug', () => {
       account_id: 'acc-b',
       landing_page_json: JSON.stringify({
         enabled: true,
+        template: 'gold',
         heroImageUrl: 'https://cdn.example.com/hero.webp',
         eyebrow: 'SPECIAL CLASS',
         headline: '成果につながる講座',
         description: '説明文',
+        problems: ['課題A'],
+        solutionTitle: '解決策A',
+        solutionBody: '解決本文A',
         benefits: ['メリット1', 'メリット2'],
         instructorName: '講師名',
         instructorBio: 'プロフィール',
+        testimonials: [
+          { quote: '参加者コメントA', author: '参加者A' },
+          { quote: '<img src=x onerror=alert(1)>', author: '安全確認' },
+        ],
+        eventDetails: 'オンライン開催A',
+        faqs: [{ question: '質問A', answer: '回答A' }],
         notice: '注意事項',
         ctaLabel: '無料で予約する',
         accentColor: '#123abc',
+        sectionOrder: ['faq', 'problems', 'solution', 'benefits', 'cta', 'instructor', 'testimonials', 'details', 'notice'],
+        hiddenSections: ['instructor'],
       }),
     }));
     const res = await req('/lp/webinar/test-webinar');
@@ -210,6 +222,13 @@ describe('GET /lp/webinar/:slug', () => {
     expect(body).toContain('メリット1');
     expect(body).toContain('無料で予約する');
     expect(body).toContain('--accent: #123abc');
+    expect(body).toContain('<body class="gold">');
+    expect(body).toContain('参加者コメントA');
+    expect(body).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(body).not.toContain('<img src=x onerror=alert(1)>');
+    expect(body).toContain('質問A');
+    expect(body.indexOf('質問A')).toBeLessThan(body.indexOf('課題A'));
+    expect(body).not.toContain('プロフィール');
 
     dbMocks.getWebinarBySlug.mockResolvedValue(makeWebinar({
       account_id: 'acc-b',
@@ -933,9 +952,10 @@ describe('admin CRUD', () => {
       body: JSON.stringify({ landingPage }),
     });
     expect(res.status).toBe(200);
-    expect(dbMocks.updateWebinar).toHaveBeenCalledWith(
-      expect.anything(), 'w1', expect.objectContaining({ landingPageJson: JSON.stringify(landingPage) }),
-    );
+    const saved = JSON.parse(dbMocks.updateWebinar.mock.calls[0]![2].landingPageJson as string);
+    expect(saved).toMatchObject(landingPage);
+    expect(saved.template).toBe('dark');
+    expect(saved.sectionOrder).toHaveLength(9);
   });
 
   test('PUT accepts a landing page without a hero image', async () => {
@@ -968,6 +988,21 @@ describe('admin CRUD', () => {
             instructorName: '', instructorBio: '', notice: '', ctaLabel: '予約', accentColor: '#06c755',
           },
           heroImageUrl: 'javascript:alert(1)',
+        },
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(dbMocks.updateWebinar).not.toHaveBeenCalled();
+  });
+
+  test('PUT rejects duplicate landing-page sections', async () => {
+    dbMocks.getWebinarById.mockResolvedValue(makeWebinar());
+    const res = await reqAsStaff('/api/webinars/w1', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        landingPage: {
+          enabled: true, headline: 'x', ctaLabel: '予約', accentColor: '#06c755',
+          sectionOrder: Array(9).fill('benefits'),
         },
       }),
     });

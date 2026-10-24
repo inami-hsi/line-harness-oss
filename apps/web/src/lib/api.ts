@@ -2139,17 +2139,30 @@ export type Webinar = {
 
 export type WebinarLandingPage = {
   enabled: boolean
+  template: 'dark' | 'light' | 'gold'
   heroImageUrl: string | null
   eyebrow: string
   headline: string
   description: string
+  problems: string[]
+  solutionTitle: string
+  solutionBody: string
   benefits: string[]
   instructorName: string
   instructorBio: string
+  testimonials: { quote: string; author: string }[]
+  eventDetails: string
+  faqs: { question: string; answer: string }[]
   notice: string
   ctaLabel: string
   accentColor: string
+  sectionOrder: WebinarLandingSection[]
+  hiddenSections: WebinarLandingSection[]
 }
+
+export type WebinarLandingSection =
+  | 'problems' | 'solution' | 'benefits' | 'cta' | 'instructor'
+  | 'testimonials' | 'details' | 'faq' | 'notice'
 
 export type WebinarInput = Partial<Omit<Webinar, 'id' | 'createdAt' | 'updatedAt'>>
 
