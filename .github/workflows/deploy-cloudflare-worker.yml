@@ -11,6 +11,8 @@ on:
       - 'packages/shared/**'
       - 'packages/line-sdk/**'
       - 'packages/update-engine/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/deploy-cloudflare-worker.yml'
 
 jobs:
